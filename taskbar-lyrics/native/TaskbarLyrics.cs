@@ -28,7 +28,11 @@ sealed class TaskbarLyrics
     sealed class Display { public IntPtr Monitor,Taskbar; public MonitorInfo Info; public double Scale; }
     Display display;
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string name, string title);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string cls,string title);
+    [DllImport("user32.dll",SetLastError=true)] static extern IntPtr SetParent(IntPtr child,IntPtr parent);
+    [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hwnd);
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hwnd);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
@@ -38,6 +42,7 @@ sealed class TaskbarLyrics
     [DllImport("user32.dll")] static extern int SetWindowLong(IntPtr hwnd, int index, int value);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr hwnd, int command);
+    [DllImport("user32.dll")] static extern bool GetWindowBand(IntPtr hwnd,out uint band);
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
     delegate void WinEvent(IntPtr hook,uint evt,IntPtr hwnd,int objectId,int childId,uint threadId,uint time);
     [DllImport("user32.dll")] static extern IntPtr SetWinEventHook(uint min,uint max,IntPtr module,WinEvent callback,uint process,uint thread,uint flags);
@@ -65,7 +70,9 @@ sealed class TaskbarLyrics
     sealed class MaskStop { public double Start,End,Left,Right; }
     List<MaskStop> primaryStops=new List<MaskStop>(), secondaryStops=new List<MaskStop>();
     string primaryProfileKey="",secondaryProfileKey="";
-    IntPtr handle;
+    IntPtr handle,parentBar;
+    int lastParentError;
+    DateTime attachRetry=DateTime.MinValue;
     DateTime raised = DateTime.MinValue;
     static readonly HttpClient http = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(2) };
     static readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -112,7 +119,7 @@ sealed class TaskbarLyrics
     }
     object Report()
     {
-                        Rect actual; GetWindowRect(handle,out actual);
+                        Rect actual; GetWindowRect(handle,out actual);uint selfBand,barBand;GetWindowBand(handle,out selfBand);GetWindowBand(display.Taskbar,out barBand);
                         return new {
                             text=primary.Text, secondary=secondary.Text, secondaryVisible=secondary.Visibility==Visibility.Visible,
                             fontSize=primary.FontSize, visualScale=VisualTreeHelper.GetDpi(primary).DpiScaleX, windowDpi=GetDpiForWindow(handle), screenScale=display.Scale, visible=IsWindowVisible(handle),
@@ -123,6 +130,7 @@ sealed class TaskbarLyrics
                             primaryColor=primary.Foreground.ToString(), secondaryColor=secondary.Foreground.ToString(),
                             maskVisible=primaryPlayed.Visibility==Visibility.Visible, primaryMaskWidth=primaryMask.Rect.Width,
                             secondaryMaskWidth=secondaryMask.Rect.Width, shellRaises=shellRaises, aboveTaskbar=AboveTaskbar(), shellCoversLyrics=ShellCoversLyrics(),
+                            attached=parentBar!=IntPtr.Zero && GetParent(handle)==parentBar,windowBand=selfBand,taskbarBand=barBand,
                             bounds=new[]{actual.Left,actual.Top,actual.Width,actual.Height},
                             mouseTransparent=(GetWindowLong(handle,-20)&0x20)!=0,
                             noActivate=(GetWindowLong(handle,-20)&0x8000000)!=0
@@ -140,15 +148,11 @@ sealed class TaskbarLyrics
             }
             return true;
         },IntPtr.Zero);
-        // 主任务栏和副任务栏按所属屏幕匹配，不依赖排列位置。
-        EnumWindows((hwnd,data)=>{
-            var name=new StringBuilder(256);GetClassName(hwnd,name,name.Capacity);
-            if(name.ToString()=="Shell_TrayWnd" || name.ToString()=="Shell_SecondaryTrayWnd") {
-                IntPtr monitor=MonitorFromWindow(hwnd,2);
-                foreach(var item in result) if(item.Monitor==monitor) item.Taskbar=hwnd;
-            }
-            return true;
-        },IntPtr.Zero);
+        // 开始菜单打开时，主任务栏进入特殊层级，不再出现在 EnumWindows 中。
+        var bars=new List<IntPtr>();IntPtr mainBar=FindWindow("Shell_TrayWnd",null);
+        if(mainBar!=IntPtr.Zero)bars.Add(mainBar);
+        for(IntPtr bar=FindWindowEx(IntPtr.Zero,IntPtr.Zero,"Shell_SecondaryTrayWnd",null);bar!=IntPtr.Zero;bar=FindWindowEx(IntPtr.Zero,bar,"Shell_SecondaryTrayWnd",null))bars.Add(bar);
+        foreach(IntPtr bar in bars)foreach(var item in result)if(item.Monitor==MonitorFromWindow(bar,2))item.Taskbar=bar;
         result.Sort((a,b)=>{int primary=(b.Info.Flags&1).CompareTo(a.Info.Flags&1);return primary!=0?primary:string.CompareOrdinal(a.Info.Device,b.Info.Device);});
         return result;
     }
@@ -201,6 +205,7 @@ sealed class TaskbarLyrics
                     foreach(string id in new List<string>(surfaces.Keys))if(!wanted.Contains(id)){surfaces[id].Close();surfaces.Remove(id);}
                     foreach(var target in targets) {
                         TaskbarLyrics surface;
+                        if(surfaces.TryGetValue(target.Info.Device,out surface) && !IsWindow(surface.handle)){surface.Close();surfaces.Remove(target.Info.Device);}
                         if(!surfaces.TryGetValue(target.Info.Device,out surface)){surface=new TaskbarLyrics(target);surface.Open();surfaces.Add(target.Info.Device,surface);}
                         surface.display=target;surface.Apply(frame);
                     }
@@ -269,16 +274,46 @@ sealed class TaskbarLyrics
         }));
     }
 
+    void AttachToTaskbar(IntPtr bar)
+    {
+        if(parentBar==bar && GetParent(handle)==bar)return;
+        if(DateTime.UtcNow<attachRetry)return;
+        // 作为任务栏子窗口继承 Shell 显示层级，避免开始菜单压住普通置顶窗口。
+        int style=GetWindowLong(handle,-16);
+        if(bar!=IntPtr.Zero) {
+            SetWindowLong(handle,-16,(style&~unchecked((int)0x80000000))|0x40000000);
+            SetParent(handle,bar);
+            int parentError=Marshal.GetLastWin32Error();
+            if(GetParent(handle)!=bar) {
+                SetWindowLong(handle,-16,style);
+                // 菜单已打开时跨层级挂载受限，等菜单关闭后自动重试。
+                attachRetry=DateTime.UtcNow.AddSeconds(1);
+                if(lastParentError!=parentError)Log("任务栏挂载等待，错误码 "+parentError);
+                lastParentError=parentError;return;
+            }
+        }else {
+            SetParent(handle,IntPtr.Zero);
+            SetWindowLong(handle,-16,(style&~0x40000000)|unchecked((int)0x80000000));
+        }
+        parentBar=bar;lastParentError=0;attachRetry=DateTime.MinValue;
+    }
+    void Position(Rect area)
+    {
+        Rect bar;int x=area.Left,y=area.Top;
+        if(parentBar!=IntPtr.Zero && GetWindowRect(parentBar,out bar)){x-=bar.Left;y-=bar.Top;}
+        SetWindowPos(handle,parentBar==IntPtr.Zero?new IntPtr(-1):IntPtr.Zero,x,y,area.Width,area.Height,0x10|0x40);
+        raised=DateTime.UtcNow;
+    }
     void RestoreLayer()
     {
-        SetWindowPos(handle,new IntPtr(-1),0,0,0,0,0x13);
+        SetWindowPos(handle,parentBar==IntPtr.Zero?new IntPtr(-1):IntPtr.Zero,0,0,0,0,0x13);
         shellRaises++;raised=DateTime.UtcNow;
     }
 
     bool AboveTaskbar()
     {
         IntPtr bar=display.Taskbar;
-        if(bar==IntPtr.Zero)return true;
+        if(bar==IntPtr.Zero || GetParent(handle)==bar)return true;
         for(IntPtr item=GetWindow(handle,2);item!=IntPtr.Zero;item=GetWindow(item,2)) if(item==bar) return true;
         return false;
     }
@@ -329,6 +364,7 @@ sealed class TaskbarLyrics
             (Convert.ToBoolean(s["hideFullscreen"]) && Fullscreen(taskbar));
         allowDisplay=!hide;
         if (hide) { ShowWindow(handle,0); return; }
+        AttachToTaskbar(taskbar);
         Rect area=Placement(bar,scale,s);
         primary.FontFamily=secondary.FontFamily=new FontFamily(Convert.ToString(frame["fontFamily"]));
         Style(s,area.Height/scale);
@@ -356,8 +392,7 @@ sealed class TaskbarLyrics
         bool moved=area.Left!=actual.Left || area.Top!=actual.Top || area.Width!=actual.Width || area.Height!=actual.Height;
         // 定期恢复置顶层级，同时避免每一帧重排任务栏窗口。
         if (moved || !IsWindowVisible(handle) || (DateTime.UtcNow-raised).TotalSeconds >= 2) {
-            SetWindowPos(handle,new IntPtr(-1),area.Left,area.Top,area.Width,area.Height,0x10 | 0x40);
-            raised=DateTime.UtcNow;
+            Position(area);
         }
     }
 
