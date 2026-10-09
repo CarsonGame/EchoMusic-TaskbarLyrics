@@ -103,7 +103,7 @@ sealed class TaskbarLyrics
         window.Opacity=0;window.Show();ShowWindow(handle,0);
         CompositionTarget.Rendering+=RenderScroll;
         foregroundHook=SetWinEventHook(3,3,IntPtr.Zero,shellEvent,0,0,2);
-        reorderHook=SetWinEventHook(0x8004,0x8004,IntPtr.Zero,shellEvent,0,0,2);
+        reorderHook=SetWinEventHook(0x8002,0x8004,IntPtr.Zero,shellEvent,0,0,2);
     }
     void Close()
     {
@@ -122,7 +122,7 @@ sealed class TaskbarLyrics
                             secondaryFontSize=secondary.FontSize, fontFamily=primary.FontFamily.Source,
                             primaryColor=primary.Foreground.ToString(), secondaryColor=secondary.Foreground.ToString(),
                             maskVisible=primaryPlayed.Visibility==Visibility.Visible, primaryMaskWidth=primaryMask.Rect.Width,
-                            secondaryMaskWidth=secondaryMask.Rect.Width, shellRaises=shellRaises, aboveTaskbar=AboveTaskbar(),
+                            secondaryMaskWidth=secondaryMask.Rect.Width, shellRaises=shellRaises, aboveTaskbar=AboveTaskbar(), shellCoversLyrics=ShellCoversLyrics(),
                             bounds=new[]{actual.Left,actual.Top,actual.Width,actual.Height},
                             mouseTransparent=(GetWindowLong(handle,-20)&0x20)!=0,
                             noActivate=(GetWindowLong(handle,-20)&0x8000000)!=0
@@ -260,7 +260,8 @@ sealed class TaskbarLyrics
     void OnShellEvent(IntPtr hook,uint evt,IntPtr hwnd,int objectId,int childId,uint threadId,uint time)
     {
         IntPtr bar=display.Taskbar;
-        bool shell=evt==3 ? IsShellSurface(hwnd,bar) : hwnd==bar || IsChild(bar,hwnd) || GetAncestor(hwnd,3)==bar;
+        // 开始菜单会在获得焦点之后继续显示并重排，不能只监听任务栏自身。
+        bool shell=IsShellSurface(hwnd,bar);
         if (!shell || !allowDisplay) return;
         window.Dispatcher.BeginInvoke(DispatcherPriority.Render,new Action(() => {
             if (!allowDisplay || !IsWindowVisible(handle)) return;
@@ -279,6 +280,19 @@ sealed class TaskbarLyrics
         IntPtr bar=display.Taskbar;
         if(bar==IntPtr.Zero)return true;
         for(IntPtr item=GetWindow(handle,2);item!=IntPtr.Zero;item=GetWindow(item,2)) if(item==bar) return true;
+        return false;
+    }
+
+    bool ShellCoversLyrics()
+    {
+        // 开始菜单透明宿主也可能覆盖任务栏区域，检查实际 Shell 层级。
+        Rect lyrics;GetWindowRect(handle,out lyrics);
+        for(IntPtr item=GetWindow(handle,3);item!=IntPtr.Zero;item=GetWindow(item,3)) {
+            Rect bounds;
+            if(!IsWindowVisible(item) || !GetWindowRect(item,out bounds))continue;
+            if(bounds.Left>=lyrics.Right || bounds.Right<=lyrics.Left || bounds.Top>=lyrics.Bottom || bounds.Bottom<=lyrics.Top)continue;
+            if(IsShellSurface(item,display.Taskbar))return true;
+        }
         return false;
     }
 
@@ -383,7 +397,7 @@ sealed class TaskbarLyrics
     void RenderScroll(object sender,EventArgs e)
     {
         // Shell 并非每次点击都会发出层级事件，渲染前检查可避免等待定时置顶。
-        if (allowDisplay && IsWindowVisible(handle) && !AboveTaskbar()) RestoreLayer();
+        if (allowDisplay && IsWindowVisible(handle) && (!AboveTaskbar() || ShellCoversLyrics())) RestoreLayer();
         // 渲染帧推算本句进度，暂停冻结；每次宿主快照都会校准跳转与倍速。
         double current=timelineMs+(clockPlaying ? lyricClock.Elapsed.TotalMilliseconds*playbackRate : 0);
         double progress=lineEndMs>lineStartMs ? Math.Max(0,Math.Min(1,(current-lineStartMs)/(lineEndMs-lineStartMs))) : 0;
