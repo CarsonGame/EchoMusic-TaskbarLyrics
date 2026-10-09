@@ -1,0 +1,16 @@
+{
+  "name": "CarsonGame · EchoMusic 插件",
+  "homepage": "https://github.com/CarsonGame/EchoMusic-TaskbarLyrics",
+  "plugins": [
+    {
+      "id": "taskbar-lyrics",
+      "path": "taskbar-lyrics",
+      "homepage": "https://github.com/CarsonGame/EchoMusic-TaskbarLyrics",
+      "tags": [
+        "lyrics",
+        "taskbar",
+        "windows"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+<section class="tl-settings">
+  <header class="tl-header"><div><span class="tl-eyebrow">TASKBAR LYRICS</span><h2>微光 · 任务栏歌词</h2></div><Switch v-model="draft.enabled" /></header>
+  <section class="tl-preview-card">
+    <div class="tl-caption"><span>实时预览</span><span>{{ draft.layout === 'double' ? '双行' : '单行' }} · {{ draft.progressMask ? '进度遮罩' : '纯色文字' }}</span></div>
+    <div class="tl-preview" :class="{ 'tl-preview-light': previewLight }" :style="{ fontFamily:previewFont, opacity:draft.opacity / 100 }">
+      <div class="tl-preview-line" :style="{ fontSize:draft.primaryFontSize + 'px', color:previewColors[0] }"><span>让每一句，留在此刻</span><span v-if="draft.progressMask" class="tl-preview-played" :style="{ color:draft.primaryPlayedColor, clipPath:'inset(0 ' + (100-previewProgress) + '% 0 0)' }">让每一句，留在此刻</span></div>
+      <div v-if="draft.layout === 'double'" class="tl-preview-line tl-preview-secondary" :style="{ fontSize:draft.secondaryFontSize + 'px', color:previewColors[1] }"><span>{{ draft.secondary === 'next' ? '下一段旋律，正在靠近' : 'Keep this moment in a melody' }}</span><span v-if="draft.progressMask && draft.secondary === 'translation'" class="tl-preview-played" :style="{ color:draft.secondaryPlayedColor, clipPath:'inset(0 ' + (100-previewProgress) + '% 0 0)' }">Keep this moment in a melody</span></div>
+    </div>
+    <div v-if="draft.progressMask" class="tl-preview-scrub"><span>预览进度</span><Slider v-model="previewProgress" :min="0" :max="100" :step="1" /><span>{{ previewProgress }}%</span></div>
+  </section>
+  <section class="tl-section"><h3>显示方式</h3><div class="tl-grid">
+    <div class="tl-field tl-span"><label>显示屏幕</label><Select v-model="draft.display" :options="displayOptions" /><p class="tl-note">默认主屏幕；全部屏幕同步显示。指定屏幕断开时自动使用主屏幕。</p></div>
+    <div class="tl-field"><label>歌词行数</label><Select v-model="draft.layout" :options="layoutOptions" /></div>
+    <div class="tl-field"><label>第二行内容</label><Select v-model="draft.secondary" :options="secondaryOptions" :disabled="draft.layout === 'single'" /></div>
+    <div class="tl-field tl-span"><label>歌词字体</label><Select v-model="draft.fontFamily" :options="fontOptions" filterable /></div>
+    <div class="tl-field tl-span"><label>配色方式</label><Select v-model="draft.theme" :options="themeOptions" /></div>
+  </div></section>
+  <section class="tl-section"><h3>每行文字</h3><div class="tl-type-grid">
+    <div class="tl-type-card"><div class="tl-card-label"><span class="tl-dot">1</span><h4>第一行</h4><span>{{ draft.primaryFontSize }} px</span></div>
+      <Slider v-model="draft.primaryFontSize" :min="10" :max="36" :step="1" />
+      <div class="tl-color-row"><label>文字颜色</label><label class="tl-color-control"><input type="color" :value="draft.primaryColor" @input="setColor('primaryColor', $event)"><span>{{ draft.primaryColor }}</span></label></div>
+      <div v-if="draft.progressMask" class="tl-color-row"><label>已播放颜色</label><label class="tl-color-control"><input type="color" :value="draft.primaryPlayedColor" @input="setColor('primaryPlayedColor', $event)"><span>{{ draft.primaryPlayedColor }}</span></label></div>
+    </div>
+    <div class="tl-type-card" :class="{ 'tl-muted': draft.layout === 'single' }"><div class="tl-card-label"><span class="tl-dot">2</span><h4>第二行</h4><span>{{ draft.secondaryFontSize }} px</span></div>
+      <Slider v-model="draft.secondaryFontSize" :min="8" :max="36" :step="1" />
+      <div class="tl-color-row"><label>文字颜色</label><label class="tl-color-control"><input type="color" :value="draft.secondaryColor" @input="setColor('secondaryColor', $event)"><span>{{ draft.secondaryColor }}</span></label></div>
+      <div v-if="draft.progressMask" class="tl-color-row"><label>已播放颜色</label><label class="tl-color-control"><input type="color" :value="draft.secondaryPlayedColor" @input="setColor('secondaryPlayedColor', $event)"><span>{{ draft.secondaryPlayedColor }}</span></label></div>
+    </div>
+  </div><p class="tl-note">预览实时反映字号、字体与颜色。任务栏高度不足时，两行按比例缩小。</p></section>
+  <section class="tl-section"><h3>位置与透明度</h3><div class="tl-grid">
+    <div class="tl-field"><label>显示宽度 <span>{{ draft.width }} px</span></label><Slider v-model="draft.width" :min="120" :max="900" :step="10" /></div>
+    <div class="tl-field"><label>不透明度 <span>{{ draft.opacity }}%</span></label><Slider v-model="draft.opacity" :min="30" :max="100" :step="1" /></div>
+    <div class="tl-field"><label>距任务栏左侧</label><InputNumber v-model="draft.offset" :min="0" :max="2000" :step="1" /></div>
+  </div></section>
+  <section class="tl-section"><h3>播放与行为</h3>
+    <div class="tl-toggle"><div><span>歌词进度遮罩</span><p>已播放文字逐渐显色，有逐字时间时按逐字进度显示。</p></div><Switch v-model="draft.progressMask" /></div>
+    <div class="tl-toggle"><div><span>长歌词随进度滚动</span><p>暂停时停止，跳转后重新对齐。</p></div><Switch v-model="draft.scrollLyrics" /></div>
+    <div class="tl-toggle"><span>暂停时隐藏</span><Switch v-model="draft.hidePaused" /></div>
+    <div class="tl-toggle"><span>全屏应用时隐藏</span><Switch v-model="draft.hideFullscreen" /></div>
+  </section>
+  <footer class="tl-footer"><Button @click="save" :disabled="busy">{{ busy ? '正在应用…' : '保存并应用' }}</Button><Button variant="outline" @click="restart" :disabled="busy">重新连接</Button><Button variant="ghost" @click="reset" :disabled="busy">恢复默认</Button></footer>
+  <p role="status" class="tl-status">{{ status }}</p>
+</section>

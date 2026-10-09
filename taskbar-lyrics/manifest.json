@@ -1,0 +1,21 @@
+{
+  "id": "taskbar-lyrics",
+  "name": "任务栏歌词 · 微光",
+  "version": "1.3.2",
+  "description": "Windows 多屏任务栏歌词，支持单行、双行、翻译与进度遮罩，默认显示主屏幕。",
+  "author": "CarsonGame",
+  "icon": "icon.svg",
+  "main": "index.js",
+  "style": "settings.css",
+  "runtime": {
+    "miniPlayer": false,
+    "desktopLyric": false
+  },
+  "capabilities": {
+    "process": true,
+    "webServer": true
+  },
+  "requires": {
+    "echoMusicVersion": ">=2.3.2-beta.9"
+  }
+}
