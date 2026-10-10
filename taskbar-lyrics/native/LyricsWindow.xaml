@@ -3,8 +3,41 @@
         Title="EchoMusic · 微光任务栏歌词" WindowStyle="None" ResizeMode="NoResize"
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
         ShowActivated="False" Topmost="True" Focusable="False" Width="360" Height="48">
-  <Grid x:Name="Root" Margin="0" IsHitTestVisible="False" ClipToBounds="True">
-    <StackPanel VerticalAlignment="Center" Margin="4,1">
+  <Window.Resources>
+    <SolidColorBrush x:Key="ButtonHoverBackground" Color="Transparent"/>
+    <SolidColorBrush x:Key="ButtonPressedBackground" Color="Transparent"/>
+    <Style x:Key="ControlButton" TargetType="Button">
+      <Setter Property="Width" Value="30"/><Setter Property="Height" Value="30"/>
+      <Setter Property="Margin" Value="2,0"/><Setter Property="Padding" Value="7"/>
+      <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="#F1F7F6"/>
+      <Setter Property="Focusable" Value="False"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+        <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+        <ControlTemplate.Triggers>
+          <!-- 按下状态优先，两种背景可分别关闭。 -->
+          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource ButtonHoverBackground}"/></Trigger>
+          <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource ButtonPressedBackground}"/></Trigger>
+          <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.4"/></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+  </Window.Resources>
+  <Grid x:Name="Root" Margin="0" ClipToBounds="True">
+    <!-- 内容统一上下偏移，窗口继续贴合任务栏。 -->
+    <Grid x:Name="TaskbarContent">
+    <Grid.RenderTransform><TranslateTransform x:Name="VerticalShift"/></Grid.RenderTransform>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Grid x:Name="CoverHost" Width="36" Height="36" Margin="4,0,4,0" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
+      <Grid x:Name="CoverVisual" RenderTransformOrigin="0.5,0.5">
+        <Grid.RenderTransform><RotateTransform x:Name="CoverRotation"/></Grid.RenderTransform>
+        <Grid.Resources><RectangleGeometry x:Key="CoverRectangle" Rect="0,0,36,36" RadiusX="5" RadiusY="5"/><EllipseGeometry x:Key="CoverCircle" Center="18,18" RadiusX="18" RadiusY="18"/></Grid.Resources>
+        <Border x:Name="CoverFallback"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#243C41" Offset="0"/><GradientStop Color="#528C82" Offset="1"/></LinearGradientBrush></Border.Background><Viewbox Width="17" Height="17"><Path Data="M9 5 V17 A3 3 0 1 1 7 14.17 V7 L19 4 V14 A3 3 0 1 1 17 11.17 V2 Z" Fill="#BFECE3"/></Viewbox></Border>
+        <Image x:Name="CoverImage" Stretch="UniformToFill" Visibility="Collapsed"/>
+      </Grid>
+    </Grid>
+    <Grid x:Name="LyricsHost" Grid.Column="1">
+    <StackPanel x:Name="LyricsText" VerticalAlignment="Center" Margin="4,1" IsHitTestVisible="False">
       <Grid x:Name="PrimaryViewport" ClipToBounds="True">
       <TextBlock x:Name="Primary" Text="让每一句，留在此刻" FontFamily="Microsoft YaHei UI, Segoe UI"
                  HorizontalAlignment="Left" FontSize="16" FontWeight="Medium" Foreground="#F1F7F6" TextTrimming="None" TextWrapping="NoWrap">
@@ -32,5 +65,20 @@
       </TextBlock>
       </Grid>
     </StackPanel>
+    <!-- 居中按文字定位，并保留固定按钮宽度。 -->
+    <Grid x:Name="ControlsAnchor" HorizontalAlignment="Left" Margin="4,0,4,0">
+    <Viewbox x:Name="ControlsViewport" Visibility="Collapsed" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0">
+      <Border x:Name="ControlsSurface" Width="144" Height="34" CornerRadius="18" Background="#E0202831" Padding="4,2">
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="PreviousButton" Style="{StaticResource ControlButton}" AutomationProperties.Name="上一首"><Path Data="M5 5 H8 V19 H5 Z M20 5 V19 L9 12 Z" Width="15" Height="15" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/></Button>
+          <Button x:Name="PlayButton" Style="{StaticResource ControlButton}" AutomationProperties.Name="播放"><Grid><Path x:Name="PlayGlyph" Data="M7 3 V21 L22 12 Z" Width="15" Height="15" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/><Path x:Name="PauseGlyph" Data="M6 4 H10 V20 H6 Z M14 4 H18 V20 H14 Z" Width="15" Height="15" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Visibility="Collapsed"/></Grid></Button>
+          <Button x:Name="NextButton" Style="{StaticResource ControlButton}" AutomationProperties.Name="下一首"><Path Data="M16 5 H19 V19 H16 Z M4 5 V19 L15 12 Z" Width="15" Height="15" Stretch="Uniform" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/></Button>
+          <Button x:Name="FavoriteButton" Style="{StaticResource ControlButton}" AutomationProperties.Name="收藏"><Path x:Name="FavoriteGlyph" Data="M12 21 C7 17 2 13 2 8 A5 5 0 0 1 12 7 A5 5 0 0 1 22 8 C22 13 17 17 12 21 Z" Width="16" Height="16" Stretch="Uniform" StrokeThickness="1.6" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Fill="Transparent"/></Button>
+        </StackPanel>
+      </Border>
+    </Viewbox>
+    </Grid>
+    </Grid>
+    </Grid>
   </Grid>
 </Window>

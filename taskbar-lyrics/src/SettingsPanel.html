@@ -1,43 +1,88 @@
 <section class="tl-settings">
-  <header class="tl-header"><div><span class="tl-eyebrow">TASKBAR LYRICS</span><h2>微光 · 任务栏歌词</h2></div><Switch v-model="draft.enabled" /></header>
+  <header class="tl-header"><div><span class="tl-eyebrow">TASKBAR LYRICS</span><h2>微光 · 任务栏歌词</h2><p class="tl-header-note">让歌词留在任务栏，让操作更顺手。</p></div><div class="tl-enable-control"><span>{{ draft.enabled ? '已开启' : '已关闭' }}</span><Switch v-model="draft.enabled" /></div></header>
   <section class="tl-preview-card">
     <div class="tl-caption"><span>实时预览</span><span>{{ draft.layout === 'double' ? '双行' : '单行' }} · {{ draft.progressMask ? '进度遮罩' : '纯色文字' }}</span></div>
-    <div class="tl-preview" :class="{ 'tl-preview-light': previewLight }" :style="{ fontFamily:previewFont, opacity:draft.opacity / 100 }">
-      <div class="tl-preview-line" :style="{ fontSize:draft.primaryFontSize + 'px', color:previewColors[0] }"><span>让每一句，留在此刻</span><span v-if="draft.progressMask" class="tl-preview-played" :style="{ color:draft.primaryPlayedColor, clipPath:'inset(0 ' + (100-previewProgress) + '% 0 0)' }">让每一句，留在此刻</span></div>
-      <div v-if="draft.layout === 'double'" class="tl-preview-line tl-preview-secondary" :style="{ fontSize:draft.secondaryFontSize + 'px', color:previewColors[1] }"><span>{{ draft.secondary === 'next' ? '下一段旋律，正在靠近' : 'Keep this moment in a melody' }}</span><span v-if="draft.progressMask && draft.secondary === 'translation'" class="tl-preview-played" :style="{ color:draft.secondaryPlayedColor, clipPath:'inset(0 ' + (100-previewProgress) + '% 0 0)' }">Keep this moment in a melody</span></div>
+    <div class="tl-preview" :class="{ 'tl-preview-light': previewLight, 'tl-preview-hover': draft.hoverControls, 'tl-controls-left': draft.controlsAlignment === 'left' }" :style="{ fontFamily:previewFont, opacity:draft.opacity / 100 }">
+      <div class="tl-preview-body" :style="{ transform:'translateY(' + draft.verticalOffset + 'px)' }">
+      <div v-if="draft.showCover" class="tl-preview-cover" :class="{ 'tl-cover-circle': draft.coverShape === 'circle', 'tl-cover-spin': draft.coverShape === 'circle' && draft.rotateCover }" :style="{ animationPlayState:previewPlaying ? 'running':'paused' }">
+        <img v-if="previewCover && coverFailed !== previewCover" :src="previewCover" alt="" @error="coverFailed = previewCover">
+        <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v12a3 3 0 1 1-2-2.83V7l12-3v10a3 3 0 1 1-2-2.83V2z" /></svg>
+      </div>
+      <div class="tl-preview-content"><div class="tl-preview-lyrics">
+      <div class="tl-preview-line" :style="{ fontSize:draft.primaryFontSize + 'px', color:previewColors[0] }"><span>让每一句，留在此刻</span><span v-if="draft.progressMask" class="tl-preview-played" :style="{ color:previewPlayed.primary, clipPath:'inset(0 ' + (100-previewProgress) + '% 0 0)' }">让每一句，留在此刻</span></div>
+      <div v-if="draft.layout === 'double'" class="tl-preview-line tl-preview-secondary" :style="{ fontSize:draft.secondaryFontSize + 'px', color:previewColors[1] }"><span>{{ draft.secondary === 'next' ? '下一段旋律，正在靠近' : 'Keep this moment in a melody' }}</span><span v-if="draft.progressMask && draft.secondary === 'translation'" class="tl-preview-played" :style="{ color:previewPlayed.secondary, clipPath:'inset(0 ' + (100-previewProgress) + '% 0 0)' }">Keep this moment in a melody</span></div>
+      </div><div v-if="draft.hoverControls" class="tl-preview-controls" :style="{ color:previewControls.foreground, backgroundColor:previewControls.backgroundCss, '--tl-button-hover':draft.buttonHoverBackground ? draft.buttonHoverColor : 'transparent', '--tl-button-pressed':draft.buttonPressedBackground ? draft.buttonPressedColor : 'transparent' }">
+        <button type="button" class="tl-preview-button" aria-label="预览上一首"><svg viewBox="0 0 24 24"><path d="M5 5h3v14H5zM20 5v14L9 12z" /></svg></button>
+        <button type="button" class="tl-preview-button" aria-label="预览播放状态"><svg viewBox="0 0 24 24"><path v-if="previewPlaying" d="M6 4h4v16H6zM14 4h4v16h-4z" /><path v-else d="M7 3v18l15-9z" /></svg></button>
+        <button type="button" class="tl-preview-button" aria-label="预览下一首"><svg viewBox="0 0 24 24"><path d="M16 5h3v14h-3zM4 5v14l11-7z" /></svg></button>
+        <button type="button" class="tl-preview-button" aria-label="预览收藏状态"><svg viewBox="0 0 24 24" class="tl-preview-favorite" :class="{ 'tl-favorited': previewFavorite }"><path d="M12 21C7 17 2 13 2 8a5 5 0 0 1 10-1A5 5 0 0 1 22 8c0 5-5 9-10 13Z" /></svg></button>
+      </div></div>
+      </div>
     </div>
-    <div v-if="draft.progressMask" class="tl-preview-scrub"><span>预览进度</span><Slider v-model="previewProgress" :min="0" :max="100" :step="1" /><span>{{ previewProgress }}%</span></div>
+    <div v-if="draft.enabled && draft.progressMask" class="tl-preview-scrub"><span>预览进度</span><Slider v-model="previewProgress" :min="0" :max="100" :step="1" /><span>{{ previewProgress }}%</span></div>
   </section>
-  <section class="tl-section"><h3>显示方式</h3><div class="tl-grid">
-    <div class="tl-field tl-span"><label>显示屏幕</label><Select v-model="draft.display" :options="displayOptions" /><p class="tl-note">默认主屏幕；全部屏幕同步显示。指定屏幕断开时自动使用主屏幕。</p></div>
-    <div class="tl-field"><label>歌词行数</label><Select v-model="draft.layout" :options="layoutOptions" /></div>
-    <div class="tl-field"><label>第二行内容</label><Select v-model="draft.secondary" :options="secondaryOptions" :disabled="draft.layout === 'single'" /></div>
-    <div class="tl-field tl-span"><label>歌词字体</label><Select v-model="draft.fontFamily" :options="fontOptions" filterable /></div>
-    <div class="tl-field tl-span"><label>配色方式</label><Select v-model="draft.theme" :options="themeOptions" /></div>
-  </div></section>
-  <section class="tl-section"><h3>每行文字</h3><div class="tl-type-grid">
-    <div class="tl-type-card"><div class="tl-card-label"><span class="tl-dot">1</span><h4>第一行</h4><span>{{ draft.primaryFontSize }} px</span></div>
-      <Slider v-model="draft.primaryFontSize" :min="10" :max="36" :step="1" />
-      <div class="tl-color-row"><label>文字颜色</label><label class="tl-color-control"><input type="color" :value="draft.primaryColor" @input="setColor('primaryColor', $event)"><span>{{ draft.primaryColor }}</span></label></div>
-      <div v-if="draft.progressMask" class="tl-color-row"><label>已播放颜色</label><label class="tl-color-control"><input type="color" :value="draft.primaryPlayedColor" @input="setColor('primaryPlayedColor', $event)"><span>{{ draft.primaryPlayedColor }}</span></label></div>
+  <!-- 依赖选项按条件显示，收起时保留用户原有配置。 -->
+  <div v-if="draft.enabled" class="tl-options">
+    <section class="tl-section"><div class="tl-section-heading"><h3>显示与位置</h3><p>选择屏幕，调整歌词占用的空间。</p></div><div class="tl-grid">
+      <div class="tl-field tl-span"><label>显示屏幕</label><Select v-model="draft.display" :options="displayOptions" /><p class="tl-note">指定屏幕断开时，自动回到主屏幕。</p></div>
+      <div class="tl-field"><label>显示宽度 <span>{{ draft.width }} px</span></label><Slider v-model="draft.width" :min="120" :max="900" :step="10" /></div>
+      <div class="tl-field"><label>不透明度 <span>{{ draft.opacity }}%</span></label><Slider v-model="draft.opacity" :min="30" :max="100" :step="1" /></div>
+      <div class="tl-field"><label>距任务栏左侧</label><InputNumber v-model="draft.offset" :min="0" :max="2000" :step="1" /></div>
+      <div class="tl-field"><label>垂直偏移 <span>px</span></label><InputNumber v-model="draft.verticalOffset" :min="-20" :max="20" :step="1" /><p class="tl-note">负数向上，正数向下，0 为居中。封面、歌词和按钮一起移动；偏移过大时边缘可能被裁切。</p></div>
+    </div></section>
+
+    <section class="tl-section"><div class="tl-section-heading"><h3>歌词外观</h3><p>字体、行数与颜色，在上方实时预览。</p></div><div class="tl-grid">
+      <div class="tl-field"><label>歌词行数</label><Select v-model="draft.layout" :options="layoutOptions" /></div>
+      <div class="tl-field"><label>歌词字体</label><Select v-model="draft.fontFamily" :options="fontOptions" filterable /></div>
+      <div v-if="draft.layout === 'double'" class="tl-field tl-span"><label>第二行内容</label><Select v-model="draft.secondary" :options="secondaryOptions" /></div>
+      <div class="tl-field tl-span"><label>待歌词颜色</label><Select v-model="draft.theme" :options="themeOptions" /></div>
     </div>
-    <div class="tl-type-card" :class="{ 'tl-muted': draft.layout === 'single' }"><div class="tl-card-label"><span class="tl-dot">2</span><h4>第二行</h4><span>{{ draft.secondaryFontSize }} px</span></div>
-      <Slider v-model="draft.secondaryFontSize" :min="8" :max="36" :step="1" />
-      <div class="tl-color-row"><label>文字颜色</label><label class="tl-color-control"><input type="color" :value="draft.secondaryColor" @input="setColor('secondaryColor', $event)"><span>{{ draft.secondaryColor }}</span></label></div>
-      <div v-if="draft.progressMask" class="tl-color-row"><label>已播放颜色</label><label class="tl-color-control"><input type="color" :value="draft.secondaryPlayedColor" @input="setColor('secondaryPlayedColor', $event)"><span>{{ draft.secondaryPlayedColor }}</span></label></div>
-    </div>
-  </div><p class="tl-note">预览实时反映字号、字体与颜色。任务栏高度不足时，两行按比例缩小。</p></section>
-  <section class="tl-section"><h3>位置与透明度</h3><div class="tl-grid">
-    <div class="tl-field"><label>显示宽度 <span>{{ draft.width }} px</span></label><Slider v-model="draft.width" :min="120" :max="900" :step="10" /></div>
-    <div class="tl-field"><label>不透明度 <span>{{ draft.opacity }}%</span></label><Slider v-model="draft.opacity" :min="30" :max="100" :step="1" /></div>
-    <div class="tl-field"><label>距任务栏左侧</label><InputNumber v-model="draft.offset" :min="0" :max="2000" :step="1" /></div>
-  </div></section>
-  <section class="tl-section"><h3>播放与行为</h3>
-    <div class="tl-toggle"><div><span>歌词进度遮罩</span><p>已播放文字逐渐显色，有逐字时间时按逐字进度显示。</p></div><Switch v-model="draft.progressMask" /></div>
-    <div class="tl-toggle"><div><span>长歌词随进度滚动</span><p>暂停时停止，跳转后重新对齐。</p></div><Switch v-model="draft.scrollLyrics" /></div>
-    <div class="tl-toggle"><span>暂停时隐藏</span><Switch v-model="draft.hidePaused" /></div>
-    <div class="tl-toggle"><span>全屏应用时隐藏</span><Switch v-model="draft.hideFullscreen" /></div>
-  </section>
-  <footer class="tl-footer"><Button @click="save" :disabled="busy">{{ busy ? '正在应用…' : '保存并应用' }}</Button><Button variant="outline" @click="restart" :disabled="busy">重新连接</Button><Button variant="ghost" @click="reset" :disabled="busy">恢复默认</Button></footer>
-  <p role="status" class="tl-status">{{ status }}</p>
+    <div class="tl-toggle tl-mask-toggle"><div><span>歌词进度遮罩</span><p>已播放的文字逐渐显色，支持逐字进度。</p></div><Switch v-model="draft.progressMask" /></div>
+    <div v-if="draft.progressMask" class="tl-field tl-palette-field"><label>歌词进度遮罩颜色</label><Select v-model="draft.playedColorSource" :options="playedColorOptions" /><p v-if="draft.playedColorSource === 'cover'" class="tl-note tl-auto-color"><span :style="{ background:previewPlayed.primary }"></span>优先使用当前封面的鲜艳颜色作为歌词遮罩颜色，切歌取色期间保留上一颜色，成功后更新；首次取色前使用手动颜色。</p></div>
+    <div class="tl-type-grid" :class="{ 'tl-one-line': draft.layout === 'single' }">
+      <div class="tl-type-card"><div class="tl-card-label"><span class="tl-dot">1</span><h4>第一行</h4><span>{{ draft.primaryFontSize }} px</span></div>
+        <Slider v-model="draft.primaryFontSize" :min="10" :max="36" :step="1" />
+        <div v-if="draft.theme === 'custom'" class="tl-color-row"><label>文字颜色</label><label class="tl-color-control"><input type="color" aria-label="第一行文字颜色" :value="draft.primaryColor" @input="setColor('primaryColor', $event)"><span>{{ draft.primaryColor }}</span></label></div>
+        <div v-if="draft.progressMask && draft.playedColorSource === 'custom'" class="tl-color-row"><label>已播放颜色</label><label class="tl-color-control"><input type="color" aria-label="第一行已播放颜色" :value="draft.primaryPlayedColor" @input="setColor('primaryPlayedColor', $event)"><span>{{ draft.primaryPlayedColor }}</span></label></div>
+      </div>
+      <div v-if="draft.layout === 'double'" class="tl-type-card"><div class="tl-card-label"><span class="tl-dot">2</span><h4>第二行</h4><span>{{ draft.secondaryFontSize }} px</span></div>
+        <Slider v-model="draft.secondaryFontSize" :min="8" :max="36" :step="1" />
+        <div v-if="draft.theme === 'custom'" class="tl-color-row"><label>文字颜色</label><label class="tl-color-control"><input type="color" aria-label="第二行文字颜色" :value="draft.secondaryColor" @input="setColor('secondaryColor', $event)"><span>{{ draft.secondaryColor }}</span></label></div>
+        <div v-if="draft.progressMask && draft.secondary === 'translation' && draft.playedColorSource === 'custom'" class="tl-color-row"><label>已播放颜色</label><label class="tl-color-control"><input type="color" aria-label="第二行已播放颜色" :value="draft.secondaryPlayedColor" @input="setColor('secondaryPlayedColor', $event)"><span>{{ draft.secondaryPlayedColor }}</span></label></div>
+      </div>
+    </div><p class="tl-note">任务栏高度不足时，字号按比例适配。</p></section>
+
+    <section class="tl-section"><div class="tl-section-heading"><h3>歌曲封面</h3><p>为任务栏加上一点专辑的色彩。</p></div>
+      <div class="tl-toggle"><div><span>显示歌曲封面</span><p>封面显示在歌词左侧。</p></div><Switch v-model="draft.showCover" /></div>
+      <div v-if="draft.showCover" class="tl-dependent">
+        <div class="tl-field"><label>封面形状</label><Select v-model="draft.coverShape" :options="coverShapeOptions" /></div>
+        <div v-if="draft.coverShape === 'circle'" class="tl-toggle tl-inner-toggle"><div><span>圆形封面旋转</span><p>播放时旋转，暂停时停留。</p></div><Switch v-model="draft.rotateCover" /></div>
+      </div>
+    </section>
+
+    <section class="tl-section"><div class="tl-section-heading"><h3>快捷操作</h3><p>鼠标移入歌词，即可操作当前歌曲。</p></div>
+      <div class="tl-toggle"><div><span>鼠标悬浮显示快捷按钮</span><p>上一首、播放／暂停、下一首、收藏／取消收藏。</p></div><Switch v-model="draft.hoverControls" /></div>
+      <div v-if="draft.hoverControls" class="tl-dependent tl-controls-settings">
+        <div class="tl-field"><label>快捷按钮位置</label><Select v-model="draft.controlsAlignment" :options="controlsAlignmentOptions" /><p class="tl-note">居中位置随当前显示的歌词长度调整，按钮大小保持不变；短句会预留空间，避免遮住封面。</p></div>
+        <div class="tl-field"><label>快捷按钮图标颜色</label><Select v-model="draft.controlsIconColorSource" :options="controlsBackgroundOptions" /><p v-if="draft.controlsIconColorSource === 'cover'" class="tl-note tl-auto-color"><span :style="{ background:previewControls.foreground }"></span>图标使用当前封面的鲜艳颜色，切歌自动更新；与按钮背景独立设置。</p></div>
+        <div v-if="draft.controlsIconColorSource === 'custom'" class="tl-color-row"><label>自定义图标颜色</label><label class="tl-color-control"><input type="color" aria-label="快捷按钮自定义图标颜色" :value="draft.controlsIconColor" @input="setColor('controlsIconColor', $event)"><span>{{ draft.controlsIconColor }}</span></label></div>
+        <div class="tl-field"><label>快捷按钮背景颜色</label><Select v-model="draft.controlsBackgroundSource" :options="controlsBackgroundOptions" /><p v-if="draft.controlsBackgroundSource === 'cover'" class="tl-note tl-auto-color"><span :style="{ background:previewControls.background }"></span>背景使用当前封面的鲜艳颜色，切歌自动更新。</p></div>
+        <div v-if="draft.controlsBackgroundSource === 'custom'" class="tl-color-row"><label>自定义背景颜色</label><label class="tl-color-control"><input type="color" aria-label="快捷按钮自定义背景颜色" :value="draft.controlsBackgroundColor" @input="setColor('controlsBackgroundColor', $event)"><span>{{ draft.controlsBackgroundColor }}</span></label></div>
+        <div class="tl-field"><label>背景不透明度 <span>{{ draft.controlsBackgroundOpacity }}%</span></label><Slider v-model="draft.controlsBackgroundOpacity" :min="0" :max="100" :step="1" /><p class="tl-note">0% 完全透明，100% 完全不透明。鼠标移入上方预览查看按钮效果。</p></div>
+        <div class="tl-feedback-settings">
+          <div><div class="tl-toggle tl-inner-toggle"><div><span>按钮悬停背景</span><p>鼠标放在单个按钮上时显示背景。</p></div><Switch v-model="draft.buttonHoverBackground" /></div><div v-if="draft.buttonHoverBackground" class="tl-color-row"><label>悬停背景颜色</label><label class="tl-color-control"><input type="color" aria-label="按钮悬停背景颜色" :value="draft.buttonHoverColor" @input="setColor('buttonHoverColor', $event)"><span>{{ draft.buttonHoverColor }}</span></label></div></div>
+          <div><div class="tl-toggle tl-inner-toggle"><div><span>按钮按下背景</span><p>按住单个按钮时显示背景，优先于悬停状态。</p></div><Switch v-model="draft.buttonPressedBackground" /></div><div v-if="draft.buttonPressedBackground" class="tl-color-row"><label>按下背景颜色</label><label class="tl-color-control"><input type="color" aria-label="按钮按下背景颜色" :value="draft.buttonPressedColor" @input="setColor('buttonPressedColor', $event)"><span>{{ draft.buttonPressedColor }}</span></label></div></div>
+          <p class="tl-note">上方预览按钮仅演示外观，不操作歌曲。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="tl-section"><div class="tl-section-heading"><h3>播放行为</h3><p>让歌词显示适应你的使用习惯。</p></div>
+      <div class="tl-toggle"><div><span>长歌词随进度滚动</span><p>暂停时停止，跳转后重新对齐。</p></div><Switch v-model="draft.scrollLyrics" /></div>
+      <div class="tl-toggle"><span>暂停时隐藏</span><Switch v-model="draft.hidePaused" /></div>
+      <div class="tl-toggle"><span>全屏应用时隐藏</span><Switch v-model="draft.hideFullscreen" /></div>
+    </section>
+  </div>
+  <p v-else class="tl-empty-settings">开启上方开关后，即可调整歌词、封面和快捷操作。</p>
+  <footer class="tl-footer"><div class="tl-actions"><Button class="tl-action-button" size="sm" variant="outline" @click="save" :disabled="busy">{{ busy ? '正在应用…' : '保存并应用' }}</Button><Button v-if="draft.enabled" class="tl-action-button" size="sm" variant="outline" @click="restart" :disabled="busy">重新连接</Button><Button class="tl-action-button" size="sm" variant="outline" @click="reset" :disabled="busy">恢复默认</Button></div><p role="status" class="tl-status">{{ status }}</p></footer>
 </section>
