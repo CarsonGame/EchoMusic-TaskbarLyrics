@@ -1,12 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, normalize, makeFrame, nativeFontFamily, coverAccentFromPixels, playedPalette, controlsPalette } from '../src/core.mjs';
+import { DEFAULTS, normalize, makeFrame, nativeFontFamily, coverAccentFromPixels, playedPalette, controlsPalette, contrastRatio, readableCoverColor, previewPalettes, formatPlaybackTime } from '../src/core.mjs';
 const snapshot = {
   playback:{trackId:'1',title:'歌曲',artist:'歌手',currentTime:1,updatedAt:1000,isPlaying:true,playbackRate:1,duration:10},
   lyric:{trackId:'1',timeOffset:0,lines:[{time:0,text:'第一句',translated:'one'},{time:2,text:'第二句',translated:'two'},{time:5,text:'第三句'}]}
 };
 test('单行与双行、翻译来自同一时钟', () => {
   assert.equal(makeFrame(snapshot,DEFAULTS,2100).text,'第二句');
+  assert.equal(makeFrame(snapshot,DEFAULTS,2100).title,'歌曲');
+  assert.equal(makeFrame(snapshot,DEFAULTS,2100).artist,'歌手');
   assert.equal(makeFrame(snapshot,normalize({layout:'single'}),2100).secondary,'');
   assert.equal(makeFrame(snapshot,normalize({layout:'double'}),2100).secondary,'第三句');
   assert.equal(makeFrame(snapshot,normalize({layout:'double',secondary:'translation'}),2100).secondary,'two');
@@ -226,4 +228,39 @@ test('按钮图标单独选色，封面失败回退且不改变背景和遮罩',
   s.controlsIconColorSource='custom';assert.equal(controlsPalette(s,'#76ACED').foreground,'#334455');
   assert.equal(normalize({controlsIconColor:'invalid'}).controlsIconColor,'#F1F7F6');
   assert.equal(normalize({controlsIconColorSource:'invalid'}).controlsIconColorSource,DEFAULTS.controlsIconColorSource);
+});
+
+test('进度条使用媒体时间和时长，独立于歌词偏移并支持暂停和未知时长', () => {
+  const s=structuredClone(snapshot);s.playback.isPlaying=false;s.lyric.timeOffset=1200;
+  const frame=makeFrame(s,DEFAULTS,20000);
+  assert.equal(frame.coverTimeMs,1000);assert.equal(frame.timelineMs,2200);assert.equal(frame.durationMs,10000);
+  s.playback.clock={trackId:'1',positionMs:5000,durationMs:12000,sampledAt:20000,isPlaying:true,isAdvancing:true};s.playback.isPlaying=true;
+  assert.equal(makeFrame(s,DEFAULTS,21000).coverTimeMs,6000);assert.equal(makeFrame(s,DEFAULTS,21000).durationMs,12000);
+  s.playback.duration=0;delete s.playback.clock;assert.equal(makeFrame(s,DEFAULTS,20000).durationMs,0);
+  s.playback.duration=Infinity;assert.equal(makeFrame(s,DEFAULTS,20000).durationMs,0);
+});
+test('进度时间支持小时，异常数值不产生 NaN', () => {
+  assert.equal(formatPlaybackTime(65000),'01:05');assert.equal(formatPlaybackTime(3665000),'1:01:05');
+  assert.equal(formatPlaybackTime(-2000),'00:00');assert.equal(formatPlaybackTime(Infinity),'00:00');
+});
+test('智能对比度改善深色和浅色背景，已清晰的鲜艳颜色保持原值', () => {
+  for(const [color,background] of [['#1432D2','#202831'],['#E6D214','#E8EDEF'],['#202831','#202831']]){
+    assert.ok(contrastRatio(readableCoverColor(color,[background]),background)>=3);
+  }
+  assert.equal(readableCoverColor('#85DCD0',['#202831']),'#85DCD0');
+});
+test('图标考虑透明背景与按钮反馈，关闭智能配色或手动配色时保留原值', () => {
+  const s=normalize({controlsBackgroundOpacity:100,buttonHoverBackground:true,buttonHoverColor:'#304449',buttonPressedBackground:true,buttonPressedColor:'#3B585C'});
+  const palette=previewPalettes(s,'#E65F52');
+  for(const background of ['#E65F52',s.buttonHoverColor,s.buttonPressedColor])assert.ok(contrastRatio(palette.controls.foreground,background)>=3);
+  const manual=normalize({...s,playedColorSource:'custom',controlsIconColorSource:'custom',primaryPlayedColor:'#112233',controlsIconColor:'#223344'});
+  assert.equal(previewPalettes(manual,'#E65F52').played.primary,'#112233');assert.equal(previewPalettes(manual,'#E65F52').controls.foreground,'#223344');
+  assert.equal(previewPalettes({...s,smartContrast:false},'#E65F52').controls.foreground,'#E65F52');
+});
+test('旧配置补齐新功能，新开关独立保存，动画时长限定范围', () => {
+  const s=normalize({width:400});assert.equal(s.width,400);
+  assert.equal(s.hoverProgress,true);assert.equal(s.smartContrast,true);assert.equal(s.trackTransitions,true);assert.equal(s.transitionDuration,280);
+  assert.equal(normalize({hoverControls:false,hoverProgress:true}).hoverProgress,true);
+  assert.equal(normalize({trackTransitions:false,transitionDuration:10000}).transitionDuration,1000);
+  assert.equal(normalize({transitionDuration:-1}).transitionDuration,100);
 });

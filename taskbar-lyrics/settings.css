@@ -13,12 +13,29 @@
 .tl-preview-light{background:#e8edef}
 /* 整体偏移内容，预览背景与任务栏窗口保持固定。 */
 .tl-preview-body{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-.tl-preview-cover{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:6px;overflow:hidden;background:linear-gradient(145deg,#243c41,#85dcd055);color:#a3e1d7}
+.tl-preview-cover{position:relative;display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:6px;overflow:hidden;background:linear-gradient(145deg,#243c41,#85dcd055);color:#a3e1d7}
 .tl-preview-cover img{width:100%;height:100%;object-fit:cover}
+.tl-cover-previous{position:absolute;inset:0;opacity:1;pointer-events:none}
+.tl-preview-animated .tl-cover-previous{transition:opacity var(--tl-transition-duration)}
+.tl-cover-previous.tl-cover-fading{opacity:0}
 .tl-preview-cover>svg{width:18px;height:18px;fill:currentColor}
 .tl-cover-circle{border-radius:50%}
 .tl-cover-spin{animation:tl-disc-spin 20s linear infinite}
 .tl-preview-content{position:relative;flex:0 1 auto;width:max-content;min-width:150px}
+.tl-preview-progress-enabled .tl-preview-content{min-height:48px;display:flex;align-items:center}
+.tl-preview-progress-enabled .tl-preview-line{line-height:1.25}
+.tl-preview-progress-enabled:hover .tl-preview-lyrics,.tl-preview-progress-enabled:focus-within .tl-preview-lyrics{transform:translateY(-6px)}
+.tl-preview-progress-enabled .tl-preview-controls,.tl-preview-progress-time{top:calc(50% - 6px)}
+/* 时间和按钮共用位置；进度条保留固定的鼠标命中高度。 */
+.tl-preview-progress-time{position:absolute;left:50%;transform:translate(-50%,-50%);width:144px;text-align:center;white-space:nowrap;font-size:12px;font-variant-numeric:tabular-nums;opacity:0;pointer-events:none}
+.tl-preview-timeline{position:absolute;left:50%;transform:translateX(-50%);width:144px;bottom:0;display:flex;align-items:center;height:12px;opacity:0;pointer-events:none}
+.tl-preview-progress-enabled:hover .tl-preview-timeline,.tl-preview-progress-enabled:focus-within .tl-preview-timeline{opacity:1;pointer-events:auto}
+.tl-preview-timeline input{appearance:none;width:100%;height:12px;margin:0;background:transparent;cursor:pointer}
+.tl-preview-timeline input::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:linear-gradient(to right,var(--tl-progress-color) var(--tl-progress-position),#8885 var(--tl-progress-position))}
+.tl-preview-timeline input::-webkit-slider-thumb{appearance:none;width:0;height:0;background:var(--tl-progress-color)}
+@property --tl-progress-color{syntax:"<color>";inherits:true;initial-value:#85DCD0}
+.tl-preview-animated .tl-preview-timeline input{transition:--tl-progress-color var(--tl-transition-duration)}
+.tl-preview-animated .tl-preview-played,.tl-preview-animated .tl-preview-controls{transition:color var(--tl-transition-duration),background-color var(--tl-transition-duration),opacity .13s}
 .tl-preview-lyrics{transition:opacity .13s}
 .tl-preview-line{position:relative;width:max-content;max-width:100%;font-weight:500;line-height:1.45;white-space:nowrap}
 .tl-preview-secondary{font-weight:400}
@@ -38,6 +55,22 @@
 .tl-preview-hover:hover .tl-preview-lyrics,.tl-preview-hover:focus-within .tl-preview-lyrics{opacity:0}
 .tl-preview.tl-controls-left .tl-preview-content{flex:1}
 .tl-preview.tl-controls-left .tl-preview-controls{left:3px;transform:translateY(-50%)}
+.tl-preview.tl-controls-left .tl-preview-timeline{left:3px;transform:none}
+.tl-preview.tl-controls-left .tl-preview-progress-time{left:3px;transform:translateY(-50%)}
+.tl-preview:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-controls{opacity:0;pointer-events:none}
+.tl-preview:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-progress-time{opacity:1}
+.tl-preview:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-lyrics{opacity:0}
+.tl-preview-timeline:hover input::-webkit-slider-runnable-track,.tl-preview-timeline input:active::-webkit-slider-runnable-track{height:6px}
+.tl-preview-timeline:hover input::-webkit-slider-thumb,.tl-preview-timeline input:active::-webkit-slider-thumb{width:8px;height:8px;margin-top:-1px;border-radius:50%}
+.tl-preview-songinfo{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:1px;opacity:0;pointer-events:none}
+.tl-preview-info-line{overflow:hidden;font-size:16px;line-height:1.25;white-space:nowrap}
+.tl-preview-info-artist{font-size:12px}
+.tl-preview-info-line span{display:block;width:max-content}
+/* 只在封面悬停期间播放，鼠标回到歌词区后恢复原交互。 */
+.tl-preview:has(.tl-preview-cover:hover) .tl-preview-songinfo{opacity:1}
+.tl-preview:has(.tl-preview-cover:hover) .tl-preview-info-line span{animation:tl-info-scroll var(--tl-info-duration,1.6s) linear infinite}
+.tl-preview:has(.tl-preview-cover:hover) .tl-preview-lyrics,.tl-preview:has(.tl-preview-cover:hover) .tl-preview-controls,.tl-preview:has(.tl-preview-cover:hover) .tl-preview-timeline{opacity:0;pointer-events:none}
+@keyframes tl-info-scroll{0%,10%,100%{transform:translateX(0)}45%,55%{transform:translateX(var(--tl-info-distance,0px))}}
 .tl-options{display:grid;gap:16px}
 .tl-section{min-width:0;padding:18px;border:1px solid var(--tl-border);border-radius:14px;background:#8888880a}
 .tl-section-heading{margin-bottom:18px}

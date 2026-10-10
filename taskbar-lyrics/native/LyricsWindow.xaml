@@ -32,11 +32,15 @@
       <Grid x:Name="CoverVisual" RenderTransformOrigin="0.5,0.5">
         <Grid.RenderTransform><RotateTransform x:Name="CoverRotation"/></Grid.RenderTransform>
         <Grid.Resources><RectangleGeometry x:Key="CoverRectangle" Rect="0,0,36,36" RadiusX="5" RadiusY="5"/><EllipseGeometry x:Key="CoverCircle" Center="18,18" RadiusX="18" RadiusY="18"/></Grid.Resources>
+        <Grid x:Name="CoverLayers">
         <Border x:Name="CoverFallback"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#243C41" Offset="0"/><GradientStop Color="#528C82" Offset="1"/></LinearGradientBrush></Border.Background><Viewbox Width="17" Height="17"><Path Data="M9 5 V17 A3 3 0 1 1 7 14.17 V7 L19 4 V14 A3 3 0 1 1 17 11.17 V2 Z" Fill="#BFECE3"/></Viewbox></Border>
+        <Image x:Name="CoverPrevious" Stretch="UniformToFill" Visibility="Collapsed"/>
         <Image x:Name="CoverImage" Stretch="UniformToFill" Visibility="Collapsed"/>
+        </Grid>
       </Grid>
     </Grid>
     <Grid x:Name="LyricsHost" Grid.Column="1">
+    <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel x:Name="LyricsText" VerticalAlignment="Center" Margin="4,1" IsHitTestVisible="False">
       <Grid x:Name="PrimaryViewport" ClipToBounds="True">
       <TextBlock x:Name="Primary" Text="让每一句，留在此刻" FontFamily="Microsoft YaHei UI, Segoe UI"
@@ -65,6 +69,11 @@
       </TextBlock>
       </Grid>
     </StackPanel>
+    <!-- 封面悬停信息独立于歌词时钟，长文字只在溢出时滚动。 -->
+    <StackPanel x:Name="SongInfo" Grid.RowSpan="2" Margin="4,1" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
+      <Grid x:Name="SongTitleViewport" ClipToBounds="True"><TextBlock x:Name="SongTitle" FontSize="14" FontWeight="Medium" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="SongTitleShift"/></TextBlock.RenderTransform></TextBlock></Grid>
+      <Grid x:Name="SongArtistViewport" ClipToBounds="True" Margin="0,1,0,0"><TextBlock x:Name="SongArtist" FontSize="11" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="SongArtistShift"/></TextBlock.RenderTransform></TextBlock></Grid>
+    </StackPanel>
     <!-- 居中按文字定位，并保留固定按钮宽度。 -->
     <Grid x:Name="ControlsAnchor" HorizontalAlignment="Left" Margin="4,0,4,0">
     <Viewbox x:Name="ControlsViewport" Visibility="Collapsed" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0">
@@ -77,6 +86,17 @@
         </StackPanel>
       </Border>
     </Viewbox>
+    <Viewbox x:Name="ProgressTimeViewport" Visibility="Collapsed" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0" IsHitTestVisible="False">
+      <Border Width="144" Height="34"><TextBlock x:Name="ProgressTime" Text="00:00 / 00:00" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="#F1F7F6"/></Border>
+    </Viewbox>
+    </Grid>
+    <!-- 命中区域高度固定，加粗时不会引起悬停反复切换。 -->
+    <Grid x:Name="ProgressHost" Grid.Row="1" Width="144" Height="12" HorizontalAlignment="Left" Margin="7,0,0,2" Visibility="Collapsed">
+      <Grid x:Name="ProgressTrack" Background="Transparent" Cursor="Hand" ToolTipService.IsEnabled="False" AutomationProperties.Name="歌曲播放进度">
+        <Border x:Name="ProgressBed" Height="3" CornerRadius="3" Background="#60888888" IsHitTestVisible="False"/>
+        <Border x:Name="ProgressFill" Width="0" Height="3" HorizontalAlignment="Left" CornerRadius="2" Background="{Binding Foreground, ElementName=PrimaryPlayed}" IsHitTestVisible="False"/>
+        <Ellipse x:Name="ProgressThumb" Width="8" Height="8" HorizontalAlignment="Left" Fill="{Binding Foreground, ElementName=PrimaryPlayed}" Visibility="Collapsed" IsHitTestVisible="False"/>
+      </Grid>
     </Grid>
     </Grid>
     </Grid>

@@ -58,11 +58,17 @@ sealed class TaskbarLyrics
     [DllImport("shcore.dll")] static extern int SetProcessDpiAwareness(int awareness);
 
     Window window;
-    Grid coverHost,coverVisual,lyricsHost,controlsAnchor;
+    Grid coverHost,coverVisual,coverLayers,lyricsHost,controlsAnchor;
     StackPanel lyricsText;
-    Image coverImage;
+    StackPanel songInfo;
+    Grid songTitleViewport,songArtistViewport;
+    TextBlock songTitle,songArtist;
+    TranslateTransform songTitleShift,songArtistShift;
+    bool coverHovered;
+    readonly Stopwatch infoClock=new Stopwatch();
+    Image coverImage,coverPrevious;
     Border coverFallback,controlsSurface;
-    Viewbox controlsViewport;
+    Viewbox controlsViewport,progressTimeViewport;
     RotateTransform coverRotation;
     RectangleGeometry coverRectangle;
     EllipseGeometry coverCircle;
@@ -73,6 +79,19 @@ sealed class TaskbarLyrics
     string controlTrackId="",coverKey="";
     string controlsAlignment="center";
     double coverTimeMs;
+    Grid progressHost,progressTrack;
+    Border progressFill,progressBed;
+    System.Windows.Shapes.Ellipse progressThumb;
+    TextBlock progressTime;
+    string progressElapsed="00:00",progressDuration="00:00";
+    bool progressEnabled,progressHovered,scrubbing,transitionsEnabled,smartColors,autoPlayed,autoIcons;
+    double durationMs,scrubRatio,transitionDuration,pendingSeekMs=-1;
+    string scrubTrackId="";
+    static TaskbarLyrics scrubOwner;
+    readonly Stopwatch paletteClock=new Stopwatch(),coverFadeClock=new Stopwatch();
+    Color[] paletteFrom,paletteTo,paletteCurrent;
+    string paletteRenderKey="";
+    Color taskbarBackground;
     static Uri stateEndpoint;
     static bool actionPending;
     static readonly HashSet<TaskbarLyrics> instances=new HashSet<TaskbarLyrics>();
@@ -138,7 +157,11 @@ sealed class TaskbarLyrics
         {"controlsAlignment","left"},
         {"showCover",true},
         {"coverShape","rectangle"},
-        {"rotateCover",false}
+        {"rotateCover",false},
+        {"hoverProgress",true},
+        {"smartContrast",true},
+        {"trackTransitions",true},
+        {"transitionDuration",280}
     };
 
 
@@ -161,8 +184,23 @@ sealed class TaskbarLyrics
             secondaryMask = (RectangleGeometry)window.FindName("SecondaryMask");
             coverHost=(Grid)window.FindName("CoverHost");coverVisual=(Grid)window.FindName("CoverVisual");
             lyricsHost=(Grid)window.FindName("LyricsHost");lyricsText=(StackPanel)window.FindName("LyricsText");
+            songInfo=(StackPanel)window.FindName("SongInfo");songTitleViewport=(Grid)window.FindName("SongTitleViewport");songArtistViewport=(Grid)window.FindName("SongArtistViewport");
+            songTitle=(TextBlock)window.FindName("SongTitle");songArtist=(TextBlock)window.FindName("SongArtist");
+            songTitleShift=(TranslateTransform)window.FindName("SongTitleShift");songArtistShift=(TranslateTransform)window.FindName("SongArtistShift");
             controlsAnchor=(Grid)window.FindName("ControlsAnchor");
             coverImage=(Image)window.FindName("CoverImage");coverFallback=(Border)window.FindName("CoverFallback");
+            coverPrevious=(Image)window.FindName("CoverPrevious");
+            coverLayers=(Grid)window.FindName("CoverLayers");
+            progressHost=(Grid)window.FindName("ProgressHost");progressTrack=(Grid)window.FindName("ProgressTrack");
+            progressFill=(Border)window.FindName("ProgressFill");progressThumb=(System.Windows.Shapes.Ellipse)window.FindName("ProgressThumb");
+            progressBed=(Border)window.FindName("ProgressBed");progressTime=(TextBlock)window.FindName("ProgressTime");
+            progressTimeViewport=(Viewbox)window.FindName("ProgressTimeViewport");
+            progressTrack.MouseEnter+=(sender,e)=>SetProgressHover(true);
+            progressTrack.MouseLeave+=(sender,e)=>{if(!scrubbing)SetProgressHover(false);};
+            progressTrack.MouseLeftButtonDown+=(sender,e)=>{BeginScrub(e.GetPosition(progressTrack).X/progressTrack.ActualWidth);if(scrubbing)progressTrack.CaptureMouse();e.Handled=true;};
+            progressTrack.MouseMove+=(sender,e)=>{if(scrubbing){scrubRatio=ClampRatio(e.GetPosition(progressTrack).X/progressTrack.ActualWidth);RenderScroll(null,EventArgs.Empty);e.Handled=true;}};
+            progressTrack.MouseLeftButtonUp+=(sender,e)=>{if(scrubbing){scrubRatio=ClampRatio(e.GetPosition(progressTrack).X/progressTrack.ActualWidth);FinishScrub();e.Handled=true;}};
+            progressTrack.LostMouseCapture+=(sender,e)=>{if(scrubbing)CancelScrub();};
             coverRotation=(RotateTransform)window.FindName("CoverRotation");
             coverRectangle=(RectangleGeometry)coverVisual.Resources["CoverRectangle"];coverCircle=(EllipseGeometry)coverVisual.Resources["CoverCircle"];
             controlsViewport=(Viewbox)window.FindName("ControlsViewport");controlsSurface=(Border)window.FindName("ControlsSurface");
@@ -191,7 +229,7 @@ sealed class TaskbarLyrics
     }
     void Close()
     {
-        closed=true;pointerTimer.Stop();instances.Remove(this);
+        closed=true;CancelScrub();pointerTimer.Stop();instances.Remove(this);
         CompositionTarget.Rendering-=RenderScroll;
         UnhookWinEvent(foregroundHook);UnhookWinEvent(reorderHook);window.Close();
     }
@@ -208,6 +246,10 @@ sealed class TaskbarLyrics
                             primaryColor=primary.Foreground.ToString(), secondaryColor=secondary.Foreground.ToString(),
                             primaryPlayedColor=primaryPlayed.Foreground.ToString(),secondaryPlayedColor=secondaryPlayed.Foreground.ToString(),controlsColor=previousButton.Foreground.ToString(),favoriteColor=favoriteButton.Foreground.ToString(),
                             controlsBackground=controlsSurface.Background.ToString(),
+                            progressEnabled=progressEnabled,progressVisible=progressHost.Visibility==Visibility.Visible,progressWidth=progressFill.Width,progressTrackWidth=progressTrack.ActualWidth,progressElapsed=progressElapsed,progressDuration=progressDuration,scrubbing=scrubbing,durationMs=durationMs,
+                            progressHovered=progressHovered,progressTimeVisible=progressTimeViewport.Visibility==Visibility.Visible,progressTime=progressTime.Text,progressThickness=progressFill.Height,
+                            coverHovered=coverHovered,songInfoVisible=songInfo.Visibility==Visibility.Visible,songTitle=songTitle.Text,songArtist=songArtist.Text,songTitleOffset=songTitleShift.X,songArtistOffset=songArtistShift.X,
+                            transitionsEnabled=transitionsEnabled,transitionDuration=transitionDuration,coverOpacity=coverImage.Opacity,previousCoverVisible=coverPrevious.Visibility==Visibility.Visible,previousCoverOpacity=coverPrevious.Opacity,smartContrast=smartColors,taskbarBackground=taskbarBackground.ToString(),
                             buttonHoverBackground=((SolidColorBrush)window.Resources["ButtonHoverBackground"]).Color.ToString(),buttonPressedBackground=((SolidColorBrush)window.Resources["ButtonPressedBackground"]).Color.ToString(),
                             tooltipsEnabled=ToolTipService.GetIsEnabled(previousButton)||ToolTipService.GetIsEnabled(playButton)||ToolTipService.GetIsEnabled(nextButton)||ToolTipService.GetIsEnabled(favoriteButton),
                             hasButtonTooltips=previousButton.ToolTip!=null || playButton.ToolTip!=null || nextButton.ToolTip!=null || favoriteButton.ToolTip!=null,
@@ -246,7 +288,7 @@ sealed class TaskbarLyrics
         var result=new List<object>();
         // 界面按当前连接屏幕连续编号；设备标识仅用于保存选择和窗口匹配。
         int number=0;
-        foreach(var item in screens) result.Add(new {id=item.Info.Device,label="屏幕 "+(++number)+" · "+item.Info.Monitor.Width+" × "+item.Info.Monitor.Height+((item.Info.Flags&1)!=0?"（主屏幕）":""),primary=(item.Info.Flags&1)!=0,bounds=new[]{item.Info.Monitor.Left,item.Info.Monitor.Top,item.Info.Monitor.Width,item.Info.Monitor.Height},scale=item.Scale});
+        foreach(var item in screens) result.Add(new {id=item.Info.Device,label="屏幕 "+(++number)+" · "+item.Info.Monitor.Width+" × "+item.Info.Monitor.Height+((item.Info.Flags&1)!=0?"（主屏幕）":""),primary=(item.Info.Flags&1)!=0,bounds=new[]{item.Info.Monitor.Left,item.Info.Monitor.Top,item.Info.Monitor.Width,item.Info.Monitor.Height},scale=item.Scale,taskbarLight=TaskbarLight()});
         return result.ToArray();
     }
     [STAThread] static int Main(string[] args)
@@ -318,25 +360,49 @@ sealed class TaskbarLyrics
     {
         if (message == 0x21) { handled=true; return new IntPtr(3); }
         if (message == 0x84) {
-            // 仅按钮区域接收点击；歌词与封面继续穿透到任务栏。
-            handled=true;return new IntPtr(hovering && InControls(new Point(unchecked((short)(l.ToInt64()&0xffff)),unchecked((short)((l.ToInt64()>>16)&0xffff))))?1:-1);
+            // 按钮与进度条接收点击，其余区域仍穿透到任务栏。
+            var point=new Point(unchecked((short)(l.ToInt64()&0xffff)),unchecked((short)((l.ToInt64()>>16)&0xffff)));
+            handled=true;return new IntPtr(scrubbing || (hovering && (InControls(point) || InProgress(point)))?1:-1);
         }
         return IntPtr.Zero;
     }
 
     void SetHover(bool value)
     {
-        if(hovering==value)return;
         hovering=value;
-        controlsViewport.Visibility=value?Visibility.Visible:Visibility.Collapsed;
-        lyricsText.Visibility=value?Visibility.Hidden:Visibility.Visible;
+        if(!value)SetCoverHover(false);
+        progressHost.Visibility=value && progressEnabled && !coverHovered?Visibility.Visible:Visibility.Collapsed;
+        SetProgressHover(value && progressHovered);
         int style=GetWindowLong(handle,-20);
         SetWindowLong(handle,-20,value?style&~0x20:style|0x20);
+    }
+    void SetProgressHover(bool value)
+    {
+        progressHovered=hovering && !coverHovered && progressEnabled && (value || scrubbing);
+        // 隐藏按钮仍保留测量尺寸，时间和进度条不会跳位。
+        controlsViewport.Visibility=hovering && !coverHovered && (hoverEnabled || progressEnabled)?(hoverEnabled && !progressHovered?Visibility.Visible:Visibility.Hidden):Visibility.Collapsed;
+        progressTimeViewport.Visibility=progressHovered?Visibility.Visible:Visibility.Collapsed;
+        lyricsText.Visibility=coverHovered || (hovering && (hoverEnabled || progressHovered))?Visibility.Hidden:Visibility.Visible;
+        progressBed.Height=progressFill.Height=progressHovered?6:3;
+        progressThumb.Visibility=progressHovered?Visibility.Visible:Visibility.Collapsed;
+    }
+    void SetCoverHover(bool value)
+    {
+        bool next=value && coverEnabled && allowDisplay && !scrubbing;
+        if(next!=coverHovered){if(next)infoClock.Restart();else infoClock.Reset();songTitleShift.X=songArtistShift.X=0;}
+        coverHovered=next;songInfo.Visibility=next?Visibility.Visible:Visibility.Collapsed;
+    }
+    bool InCover(Point screen)
+    {
+        if(!coverEnabled || coverHost.Visibility!=Visibility.Visible)return false;
+        Point first=coverHost.PointToScreen(new Point(0,0)),last=coverHost.PointToScreen(new Point(coverHost.ActualWidth,coverHost.ActualHeight));
+        return new System.Windows.Rect(first,last).Contains(screen);
     }
     void UpdateHover()
     {
         NativePoint point=new NativePoint();Rect bounds;
-        bool inside=allowDisplay && hoverEnabled && IsWindowVisible(handle) && GetCursorPos(out point);
+        if(scrubbing){SetHover(true);SetProgressHover(true);return;}
+        bool inside=allowDisplay && (hoverEnabled || progressEnabled || coverEnabled) && IsWindowVisible(handle) && GetCursorPos(out point);
         if(inside) {
             GetWindowRect(handle,out bounds);
             IntPtr hit=WindowFromPoint(point),bar=display.Taskbar;
@@ -344,7 +410,9 @@ sealed class TaskbarLyrics
             inside=point.X>=bounds.Left && point.X<bounds.Right && point.Y>=bounds.Top && point.Y<bounds.Bottom &&
                 (hit==handle || hit==bar || (bar!=IntPtr.Zero && (IsChild(bar,hit) || GetAncestor(hit,2)==bar)) || (bar==IntPtr.Zero && (name.ToString()=="Progman" || name.ToString()=="WorkerW")));
         }
+        SetCoverHover(inside && InCover(new Point(point.X,point.Y)));
         SetHover(inside);
+        SetProgressHover(inside && InProgress(new Point(point.X,point.Y)));
     }
     bool InControls(Point screen)
     {
@@ -352,9 +420,37 @@ sealed class TaskbarLyrics
         Point first=controlsSurface.PointToScreen(new Point(0,0)),last=controlsSurface.PointToScreen(new Point(controlsSurface.ActualWidth,controlsSurface.ActualHeight));
         return new System.Windows.Rect(first,last).Contains(screen);
     }
+    bool InProgress(Point screen)
+    {
+        if(progressHost.Visibility!=Visibility.Visible || progressTrack.ActualWidth<=0)return false;
+        Point first=progressTrack.PointToScreen(new Point(0,0)),last=progressTrack.PointToScreen(new Point(progressTrack.ActualWidth,progressTrack.ActualHeight));
+        return new System.Windows.Rect(first,last).Contains(screen);
+    }
+    static double ClampRatio(double value){return double.IsNaN(value)?0:Math.Max(0,Math.Min(1,value));}
+    void BeginScrub(double ratio)
+    {
+        if(!progressEnabled || !allowDisplay || !hasControlTrack || frameBusy || actionPending || scrubOwner!=null)return;
+        scrubOwner=this;scrubbing=true;scrubTrackId=controlTrackId;scrubRatio=ClampRatio(ratio);
+        SetCoverHover(false);
+        SetHover(true);SetProgressHover(true);foreach(var surface in instances)surface.RefreshControls();RenderScroll(null,EventArgs.Empty);
+    }
+    void CancelScrub()
+    {
+        if(!scrubbing)return;
+        scrubbing=false;if(scrubOwner==this)scrubOwner=null;
+        progressTrack.ReleaseMouseCapture();foreach(var surface in instances)surface.RefreshControls();
+        SetProgressHover(progressTrack.IsMouseOver);
+    }
+    void FinishScrub()
+    {
+        if(!scrubbing)return;
+        bool valid=progressEnabled && scrubTrackId==controlTrackId;
+        double seconds=scrubRatio*durationMs/1000;
+        CancelScrub();if(valid)SendAction("seek",seconds);
+    }
     void RefreshControls()
     {
-        bool enabled=hasControlTrack && !frameBusy && !actionPending;
+        bool enabled=hasControlTrack && !frameBusy && !actionPending && scrubOwner==null;
         previousButton.IsEnabled=playButton.IsEnabled=nextButton.IsEnabled=favoriteButton.IsEnabled=enabled;
         playGlyph.Visibility=clockPlaying?Visibility.Collapsed:Visibility.Visible;
         pauseGlyph.Visibility=clockPlaying?Visibility.Visible:Visibility.Collapsed;
@@ -363,16 +459,23 @@ sealed class TaskbarLyrics
         favoriteButton.Foreground=controlsColor;
         favoriteGlyph.Fill=favorite?favoriteButton.Foreground:Brushes.Transparent;
     }
-    async void SendAction(string action)
+    async void SendAction(string action,double value=0)
     {
-        if(actionPending || !hasControlTrack || !hoverEnabled || !allowDisplay)return;
+        if(actionPending || scrubOwner!=null || !hasControlTrack || !(action=="seek"?progressEnabled:hoverEnabled) || !allowDisplay)return;
         // 所有屏幕共享操作锁，等待播放器确认后统一更新图标。
         actionPending=true;foreach(var surface in instances)surface.RefreshControls();
+        if(action=="seek")foreach(var surface in instances)surface.pendingSeekMs=value*1000;
         try {
             var url=new UriBuilder(stateEndpoint);url.Path="/command";
-            url.Query=stateEndpoint.Query.TrimStart('?')+"&action="+Uri.EscapeDataString(action)+"&trackId="+Uri.EscapeDataString(controlTrackId);
+            // .NET Framework 的 Query setter 会加问号，拼完后只赋值一次。
+            string query=stateEndpoint.Query.TrimStart('?')+"&action="+Uri.EscapeDataString(action)+"&trackId="+Uri.EscapeDataString(controlTrackId);
+            if(action=="seek")query+="&value="+value.ToString("R",CultureInfo.InvariantCulture);
+            url.Query=query;
             using(var response=await actions.PostAsync(url.Uri,new ByteArrayContent(new byte[0]))) {
-                var result=json.Deserialize<Dictionary<string,object>>(await response.Content.ReadAsStringAsync());
+                string body=await response.Content.ReadAsStringAsync();
+                // 认证失败等空响应也保留 HTTP 状态，避免报成空引用异常。
+                if(String.IsNullOrWhiteSpace(body)){Log("歌曲操作失败：HTTP "+(int)response.StatusCode+"，播放器返回空响应");return;}
+                var result=json.Deserialize<Dictionary<string,object>>(body);
                 if(response.IsSuccessStatusCode && result.ContainsKey("frame")) {
                     foreach(var surface in new List<TaskbarLyrics>(instances))surface.Apply((Dictionary<string,object>)result["frame"]);
                 } else {
@@ -382,7 +485,7 @@ sealed class TaskbarLyrics
             }
         } catch(Exception error) {
             Log("歌曲操作失败："+error.Message);
-        } finally {actionPending=false;foreach(var surface in instances)surface.RefreshControls();}
+        } finally {actionPending=false;foreach(var surface in instances){surface.pendingSeekMs=-1;surface.RefreshControls();}}
     }
     static async Task<BitmapSource> ReadCover(string source)
     {
@@ -412,8 +515,8 @@ sealed class TaskbarLyrics
     async void ApplyCover(string source,string fallback)
     {
         string key=source+"|"+fallback;if(key==coverKey)return;
-        coverKey=key;coverImage.Source=null;coverImage.Visibility=Visibility.Collapsed;coverFallback.Visibility=Visibility.Visible;
-        if(source=="")return;
+        coverKey=key;
+        if(source==""){SetCoverImage(null);return;}
         Task<BitmapSource> pending;
         if(!coverCache.TryGetValue(key,out pending)) {
             // 同一封面只读取一次，所有屏幕共享冻结后的图片。
@@ -421,8 +524,24 @@ sealed class TaskbarLyrics
             pending=LoadCover(source,fallback);coverCache[key]=pending;
         }
         BitmapSource image=await pending;
-        if(closed || coverKey!=key || image==null)return;
-        coverImage.Source=image;coverImage.Visibility=Visibility.Visible;coverFallback.Visibility=Visibility.Collapsed;
+        if(closed || coverKey!=key)return;
+        SetCoverImage(image);
+    }
+    void SetCoverImage(BitmapSource image)
+    {
+        // 新封面解码前保留旧图，解码后再启动过渡；快速切歌忽略旧请求。
+        var previous=coverImage.Opacity>=.5?coverImage.Source:coverPrevious.Source;
+        if(transitionsEnabled && coverFadeClock.IsRunning && coverLayers.ActualWidth>0 && coverLayers.ActualHeight>0){
+            // 连续切歌从正在显示的混合图继续，避免退回某一张旧封面。
+            var dpi=VisualTreeHelper.GetDpi(coverLayers);
+            var mixed=new RenderTargetBitmap((int)Math.Ceiling(coverLayers.ActualWidth*dpi.DpiScaleX),(int)Math.Ceiling(coverLayers.ActualHeight*dpi.DpiScaleY),96*dpi.DpiScaleX,96*dpi.DpiScaleY,PixelFormats.Pbgra32);
+            mixed.Render(coverLayers);mixed.Freeze();previous=mixed;
+        }
+        bool animate=transitionsEnabled && previous!=null && previous!=image;
+        coverPrevious.Source=animate?previous:null;coverPrevious.Visibility=animate?Visibility.Visible:Visibility.Collapsed;coverPrevious.Opacity=1;
+        coverImage.Source=image;coverImage.Visibility=image!=null?Visibility.Visible:Visibility.Collapsed;
+        coverImage.Opacity=animate?0:1;coverFallback.Visibility=image!=null?Visibility.Collapsed:Visibility.Visible;
+        if(animate)coverFadeClock.Restart();else coverFadeClock.Reset();
     }
 
     bool Fullscreen(IntPtr taskbar)
@@ -524,7 +643,7 @@ sealed class TaskbarLyrics
         Rect bar=display.Info.Monitor;
         double scale=display.Scale;
         if(taskbar!=IntPtr.Zero) {
-            if(!GetWindowRect(taskbar,out bar) || bar.Height<4 || bar.Width<4 || !IsWindowVisible(taskbar)){allowDisplay=false;SetHover(false);ShowWindow(handle,0);return;}
+            if(!GetWindowRect(taskbar,out bar) || bar.Height<4 || bar.Width<4 || !IsWindowVisible(taskbar)){allowDisplay=false;CancelScrub();SetHover(false);ShowWindow(handle,0);return;}
             scale=Math.Max(.5,GetDpiForWindow(taskbar)/96.0);
         }else {
             // 副屏未启用系统任务栏时，在该屏底边保留歌词显示。
@@ -537,23 +656,35 @@ sealed class TaskbarLyrics
             (Convert.ToBoolean(s["hidePaused"]) && !Convert.ToBoolean(frame["playing"])) ||
             (Convert.ToBoolean(s["hideFullscreen"]) && Fullscreen(taskbar));
         allowDisplay=!hide;
-        if (hide) { SetHover(false);ShowWindow(handle,0); return; }
+        if (hide) { CancelScrub();SetHover(false);ShowWindow(handle,0); return; }
         OwnTaskbar(taskbar);
         Rect area=Placement(bar,scale,s);
         // WPF 使用逻辑像素，偏移自动适配每块屏幕的 DPI。
         verticalShift.Y=s.ContainsKey("verticalOffset")?Math.Max(-20,Math.Min(20,Convert.ToDouble(s["verticalOffset"]))):0;
+        string nextTrack=frame.ContainsKey("trackId")?Convert.ToString(frame["trackId"]):"";
+        if(nextTrack!=controlTrackId){CancelScrub();pendingSeekMs=-1;}
+        controlTrackId=nextTrack;hasControlTrack=controlTrackId!="";
+        durationMs=frame.ContainsKey("durationMs")?Convert.ToDouble(frame["durationMs"]):0;
+        if(double.IsNaN(durationMs) || double.IsInfinity(durationMs) || durationMs<0)durationMs=0;
+        progressEnabled=s.ContainsKey("hoverProgress") && Convert.ToBoolean(s["hoverProgress"]) && durationMs>0 && hasControlTrack;
+        hoverEnabled=s.ContainsKey("hoverControls") && Convert.ToBoolean(s["hoverControls"]);
+        if(!progressEnabled)CancelScrub();
+        SetHover(hovering && (hoverEnabled || progressEnabled || coverEnabled));
         primary.FontFamily=secondary.FontFamily=new FontFamily(Convert.ToString(frame["fontFamily"]));
-        Style(s,area.Height/scale,frame);
+        Style(s,area.Height/scale-(hovering && progressEnabled && !coverHovered?14:0),frame);
         ButtonBackground("ButtonHoverBackground",s,"buttonHoverBackground","buttonHoverColor");
         ButtonBackground("ButtonPressedBackground",s,"buttonPressedBackground","buttonPressedColor");
         primary.Text=Convert.ToString(frame["text"]);
         secondary.Text=Convert.ToString(frame["secondary"]);
-        hoverEnabled=s.ContainsKey("hoverControls") && Convert.ToBoolean(s["hoverControls"]);
-        if(!hoverEnabled)SetHover(false);
-        controlTrackId=frame.ContainsKey("trackId")?Convert.ToString(frame["trackId"]):"";
-        hasControlTrack=controlTrackId!="";favorite=frame.ContainsKey("isFavorite") && Convert.ToBoolean(frame["isFavorite"]);
+        favorite=frame.ContainsKey("isFavorite") && Convert.ToBoolean(frame["isFavorite"]);
         frameBusy=frame.ContainsKey("commandBusy") && Convert.ToBoolean(frame["commandBusy"]);
         coverEnabled=s.ContainsKey("showCover") && Convert.ToBoolean(s["showCover"]);
+        if(!coverEnabled)SetCoverHover(false);
+        string title=frame.ContainsKey("title")?Convert.ToString(frame["title"]):"",artist=frame.ContainsKey("artist")?Convert.ToString(frame["artist"]):"";
+        if(title!=songTitle.Text || artist!=songArtist.Text){songTitle.Text=title;songArtist.Text=artist;if(coverHovered)infoClock.Restart();}
+        songTitle.FontFamily=songArtist.FontFamily=primary.FontFamily;
+        songTitle.FontSize=Math.Min(16,Math.Max(10,(area.Height/scale-6)*.38));songArtist.FontSize=Math.Min(12,Math.Max(8,(area.Height/scale-6)*.28));
+        songTitle.Foreground=primary.Foreground;songArtist.Foreground=secondary.Foreground;
         bool circle=s.ContainsKey("coverShape") && Convert.ToString(s["coverShape"])=="circle";
         coverSpinning=coverEnabled && circle && s.ContainsKey("rotateCover") && Convert.ToBoolean(s["rotateCover"]);
         coverTimeMs=frame.ContainsKey("coverTimeMs")?Convert.ToDouble(frame["coverTimeMs"]):Convert.ToDouble(frame["timelineMs"]);
@@ -565,7 +696,9 @@ sealed class TaskbarLyrics
         ApplyCover(coverEnabled && frame.ContainsKey("coverUrl")?Convert.ToString(frame["coverUrl"]):"",coverEnabled && frame.ContainsKey("coverSourceUrl")?Convert.ToString(frame["coverSourceUrl"]):"");
         double contentWidth=Math.Max(0,area.Width/scale-8-(coverEnabled?coverSize+8:0));
         primaryViewport.Width=secondaryViewport.Width=contentWidth;
-        controlsViewport.MaxWidth=contentWidth;controlsViewport.MaxHeight=Math.Max(1,area.Height/scale-4);
+        songTitleViewport.Width=songArtistViewport.Width=contentWidth;
+        FitLine(songTitle,contentWidth,true);FitLine(songArtist,contentWidth,true);
+        controlsViewport.MaxWidth=progressTimeViewport.MaxWidth=contentWidth;controlsViewport.MaxHeight=progressTimeViewport.MaxHeight=Math.Max(1,area.Height/scale-(hovering && progressEnabled && !coverHovered?14:4));
         scrolling=Convert.ToBoolean(s["scrollLyrics"]);
         scrollingTranslation=scrolling && Convert.ToString(s["secondary"]) == "translation";
         primaryTextWidth=FitLine(primary,primaryViewport.Width,scrolling);
@@ -577,7 +710,7 @@ sealed class TaskbarLyrics
         double anchorWidth=alignment=="center"?Math.Min(contentWidth,Math.Max(visibleTextWidth,buttonsWidth)):contentWidth;
         controlsAnchor.Width=hovering && alignment==controlsAlignment?Math.Min(controlsAnchor.Width,contentWidth):anchorWidth;
         controlsAlignment=alignment;
-        controlsViewport.HorizontalAlignment=alignment=="left"?HorizontalAlignment.Left:HorizontalAlignment.Center;
+        controlsViewport.HorizontalAlignment=progressTimeViewport.HorizontalAlignment=alignment=="left"?HorizontalAlignment.Left:HorizontalAlignment.Center;
         masking=Convert.ToBoolean(s["progressMask"]);
         primaryPlayed.Visibility=masking ? Visibility.Visible : Visibility.Collapsed;
         secondaryPlayed.Visibility=masking && Convert.ToString(s["secondary"])=="translation" ? Visibility.Visible : Visibility.Collapsed;
@@ -614,32 +747,97 @@ sealed class TaskbarLyrics
         secondaryViewport.Visibility=secondary.Visibility;
         window.Opacity=Convert.ToDouble(s["opacity"])/100;
         string theme=Convert.ToString(s["theme"]);
-        bool light=theme == "light";
-        if (theme == "auto") {
-            object setting=Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","SystemUsesLightTheme",0);
-            light=Convert.ToInt32(setting) != 0;
-        }
+        bool light=theme=="light" || (theme=="auto" && TaskbarLight());
         primary.Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme=="custom" ? Convert.ToString(s["primaryColor"]) : light ? "#202D35" : "#F1F7F6"));
         secondary.Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(theme=="custom" ? Convert.ToString(s["secondaryColor"]) : light ? "#62737B" : "#B4C3C1"));
         var palette=frame.ContainsKey("playedPalette")?(Dictionary<string,object>)frame["playedPalette"]:new Dictionary<string,object>{{"primary",s["primaryPlayedColor"]},{"secondary",s["secondaryPlayedColor"]},{"controls",""}};
-        primaryPlayed.Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(Convert.ToString(palette["primary"])));
-        secondaryPlayed.Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(Convert.ToString(palette["secondary"])));
+        Color firstPlayed=(Color)ColorConverter.ConvertFromString(Convert.ToString(palette["primary"]));
+        Color secondPlayed=(Color)ColorConverter.ConvertFromString(Convert.ToString(palette["secondary"]));
         if(theme=="custom") {
             Color color=((SolidColorBrush)primary.Foreground).Color;light=(color.R+color.G+color.B)/3<110;
         }
         // 背景 alpha 单独调节，图标保持清晰，不跟随歌词遮罩配色。
+        Color backgroundColor,iconColor;
         if(frame.ContainsKey("controlsPalette")) {
             var controls=(Dictionary<string,object>)frame["controlsPalette"];
             Color background=(Color)ColorConverter.ConvertFromString(Convert.ToString(controls["background"]));
             background.A=(byte)Math.Round(Convert.ToDouble(controls["opacity"])*255/100);
-            controlsSurface.Background=new SolidColorBrush(background);
-            controlsColor=new SolidColorBrush((Color)ColorConverter.ConvertFromString(Convert.ToString(controls["foreground"])));
+            backgroundColor=background;
+            iconColor=(Color)ColorConverter.ConvertFromString(Convert.ToString(controls["foreground"]));
         }else {
-            controlsSurface.Background=new SolidColorBrush((Color)ColorConverter.ConvertFromString(light?"#EDE8EDEF":"#ED202831"));
-            controlsColor=primary.Foreground;
+            backgroundColor=(Color)ColorConverter.ConvertFromString(light?"#EDE8EDEF":"#ED202831");
+            iconColor=((SolidColorBrush)primary.Foreground).Color;
         }
-        previousButton.Foreground=playButton.Foreground=nextButton.Foreground=controlsColor;
-        favoriteButton.Foreground=controlsColor;
+        smartColors=s.ContainsKey("smartContrast") && Convert.ToBoolean(s["smartContrast"]);
+        autoPlayed=Convert.ToString(s["playedColorSource"])=="cover";autoIcons=Convert.ToString(s["controlsIconColorSource"])=="cover";
+        transitionsEnabled=s.ContainsKey("trackTransitions") && Convert.ToBoolean(s["trackTransitions"]);
+        transitionDuration=s.ContainsKey("transitionDuration")?Math.Max(100,Math.Min(1000,Convert.ToDouble(s["transitionDuration"]))):280;
+        taskbarBackground=(Color)ColorConverter.ConvertFromString(TaskbarLight()?"#E8EDEF":"#202831");
+        progressTime.Foreground=new SolidColorBrush((Color)ColorConverter.ConvertFromString(TaskbarLight()?"#202D35":"#F1F7F6"));
+        SetPalette(new[]{firstPlayed,secondPlayed,backgroundColor,iconColor});
+        if(!transitionsEnabled){coverFadeClock.Reset();coverPrevious.Visibility=Visibility.Collapsed;coverPrevious.Source=null;coverImage.Opacity=1;}
+    }
+
+    static bool TaskbarLight()
+    {
+        return Convert.ToInt32(Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize","SystemUsesLightTheme",0))!=0;
+    }
+    static Color MixColor(Color from,Color to,double fraction)
+    {
+        return Color.FromArgb((byte)Math.Round(from.A+(to.A-from.A)*fraction,MidpointRounding.AwayFromZero),(byte)Math.Round(from.R+(to.R-from.R)*fraction,MidpointRounding.AwayFromZero),(byte)Math.Round(from.G+(to.G-from.G)*fraction,MidpointRounding.AwayFromZero),(byte)Math.Round(from.B+(to.B-from.B)*fraction,MidpointRounding.AwayFromZero));
+    }
+    static double Luminance(Color color)
+    {
+        Func<byte,double> channel=value=>{double v=value/255.0;return v<=.04045?v/12.92:Math.Pow((v+.055)/1.055,2.4);};
+        return channel(color.R)*.2126+channel(color.G)*.7152+channel(color.B)*.0722;
+    }
+    static double Contrast(Color first,Color second)
+    {
+        double a=Luminance(first),b=Luminance(second);return (Math.Max(a,b)+.05)/(Math.Min(a,b)+.05);
+    }
+    static Color ReadableColor(Color color,List<Color> backgrounds)
+    {
+        Func<Color,double> score=value=>{double result=double.MaxValue;foreach(var bg in backgrounds)result=Math.Min(result,Contrast(value,bg));return result;};
+        Color best=color;double bestScore=score(color);if(bestScore>=3)return color;
+        // 与预览相同：只对自动配色做最小亮度调整。
+        for(int step=1;step<=100;step++)foreach(Color endpoint in new[]{Colors.White,Colors.Black}){
+            Color candidate=MixColor(color,endpoint,step/100.0);double result=score(candidate);
+            if(result>=3)return candidate;if(result>bestScore){best=candidate;bestScore=result;}
+        }
+        return best;
+    }
+    void SetPalette(Color[] target)
+    {
+        bool changed=paletteTo==null;
+        if(!changed)for(int i=0;i<target.Length;i++)if(paletteTo[i]!=target[i])changed=true;
+        if(paletteTo==null || !transitionsEnabled){paletteFrom=(Color[])target.Clone();paletteCurrent=(Color[])target.Clone();paletteTo=target;paletteClock.Reset();}
+        else if(changed){paletteFrom=(Color[])paletteCurrent.Clone();paletteTo=target;paletteClock.Restart();}
+        RenderPalette();
+    }
+    void RenderPalette()
+    {
+        if(paletteTo==null)return;
+        double fraction=paletteClock.IsRunning?ClampRatio(paletteClock.Elapsed.TotalMilliseconds/transitionDuration):1;
+        // 重复快照不重启动画；连续切歌从当前显示颜色继续。
+        for(int i=0;i<paletteTo.Length;i++)paletteCurrent[i]=MixColor(paletteFrom[i],paletteTo[i],fraction);
+        Color first=paletteCurrent[0],second=paletteCurrent[1],background=paletteCurrent[2],icon=paletteCurrent[3];
+        Color hover=((SolidColorBrush)window.Resources["ButtonHoverBackground"]).Color,pressed=((SolidColorBrush)window.Resources["ButtonPressedBackground"]).Color;
+        string key=first.ToString()+second.ToString()+background.ToString()+icon.ToString()+smartColors+autoPlayed+autoIcons+taskbarBackground.ToString()+hover.ToString()+pressed.ToString();
+        if(fraction>=1)paletteClock.Reset();
+        // 静止颜色无需逐帧重建画刷或重新计算对比度。
+        if(key==paletteRenderKey)return;paletteRenderKey=key;
+        if(smartColors){
+            if(autoPlayed){first=ReadableColor(first,new List<Color>{taskbarBackground});second=ReadableColor(second,new List<Color>{taskbarBackground});}
+            if(autoIcons){
+                var backgrounds=new List<Color>{MixColor(taskbarBackground,Color.FromRgb(background.R,background.G,background.B),background.A/255.0)};
+                if(hover.A>0)backgrounds.Add(hover);if(pressed.A>0)backgrounds.Add(pressed);
+                icon=ReadableColor(icon,backgrounds);
+            }
+        }
+        primaryPlayed.Foreground=new SolidColorBrush(first);secondaryPlayed.Foreground=new SolidColorBrush(second);
+        controlsSurface.Background=new SolidColorBrush(background);controlsColor=new SolidColorBrush(icon);
+        previousButton.Foreground=playButton.Foreground=nextButton.Foreground=favoriteButton.Foreground=controlsColor;
+        favoriteGlyph.Fill=favorite?controlsColor:Brushes.Transparent;
     }
 
     void ButtonBackground(string resource,Dictionary<string,object> settings,string enabled,string color)
@@ -661,16 +859,51 @@ sealed class TaskbarLyrics
 
     void RenderScroll(object sender,EventArgs e)
     {
+        RenderPalette();
+        if(coverFadeClock.IsRunning){
+            double fraction=ClampRatio(coverFadeClock.Elapsed.TotalMilliseconds/transitionDuration);
+            // 底图保持不透明，顶图淡入，避免中途露出任务栏背景。
+            coverImage.Opacity=fraction;coverPrevious.Opacity=coverImage.Visibility==Visibility.Visible?1:1-fraction;
+            if(fraction>=1){coverFadeClock.Reset();coverPrevious.Source=null;coverPrevious.Visibility=Visibility.Collapsed;}
+        }
         // Shell 并非每次点击都会发出层级事件，渲染前检查可避免等待定时置顶。
         if (allowDisplay && IsWindowVisible(handle) && (!AboveTaskbar() || ShellCoversLyrics())) RestoreLayer();
         // 渲染帧推算本句进度，暂停冻结；每次宿主快照都会校准跳转与倍速。
         double current=timelineMs+(clockAdvancing ? lyricClock.Elapsed.TotalMilliseconds*playbackRate : 0);
         coverRotation.Angle=coverSpinning?(coverTimeMs+(clockAdvancing?lyricClock.Elapsed.TotalMilliseconds*playbackRate:0))*.018%360:0;
+        double media=Math.Max(0,Math.Min(durationMs,coverTimeMs+(clockAdvancing?lyricClock.Elapsed.TotalMilliseconds*playbackRate:0)));
+        double shown=scrubbing?scrubRatio*durationMs:pendingSeekMs>=0?pendingSeekMs:media;
+        double ratio=durationMs>0?ClampRatio(shown/durationMs):0;
+        // 使用按钮实际渲染边界，兼容居中、窄宽度和不同屏幕缩放。
+        if(progressHost.Visibility==Visibility.Visible && controlsSurface.ActualWidth>0){
+            var transform=controlsSurface.TransformToAncestor(lyricsHost);
+            Point first=transform.Transform(new Point(0,0)),last=transform.Transform(new Point(controlsSurface.ActualWidth,0));
+            progressHost.Width=Math.Max(0,last.X-first.X);progressHost.Margin=new Thickness(first.X,0,0,2);
+        }
+        progressFill.Width=progressTrack.ActualWidth*ratio;
+        progressThumb.Margin=new Thickness(Math.Max(0,Math.Min(Math.Max(0,progressTrack.ActualWidth-8),progressFill.Width-4)),0,0,0);
+        progressElapsed=FormatTime(shown);progressDuration=FormatTime(durationMs);progressTime.Text=progressElapsed+" / "+progressDuration;
+        controlsViewport.MaxHeight=progressTimeViewport.MaxHeight=Math.Max(1,window.ActualHeight-(hovering && progressEnabled && !coverHovered?14:4));
+        songTitleShift.X=InfoOffset(songTitle.Width,songTitleViewport.Width,infoClock.Elapsed.TotalSeconds);
+        songArtistShift.X=InfoOffset(songArtist.Width,songArtistViewport.Width,infoClock.Elapsed.TotalSeconds);
         double progress=lineEndMs>lineStartMs ? Math.Max(0,Math.Min(1,(current-lineStartMs)/(lineEndMs-lineStartMs))) : 0;
         primaryShift.X=scrolling ? -Math.Max(0,primary.Width-primaryViewport.Width)*progress : 0;
         secondaryShift.X=scrollingTranslation ? -Math.Max(0,secondary.Width-secondaryViewport.Width)*progress : 0;
         primaryMask.Rect=new System.Windows.Rect(0,0,masking ? MaskWidth(primaryStops,current,progress,primaryTextWidth) : 0,primary.FontSize*2);
         secondaryMask.Rect=new System.Windows.Rect(0,0,masking && secondaryPlayed.Visibility==Visibility.Visible ? MaskWidth(secondaryStops,current,progress,secondaryTextWidth) : 0,secondary.FontSize*2);
+    }
+    static double InfoOffset(double width,double viewport,double seconds)
+    {
+        double distance=Math.Max(0,width-viewport);if(distance<=0)return 0;
+        // 两端稍作停留，往返滚动不受歌曲暂停或播放进度影响。
+        double travel=distance/26,phase=seconds%(travel*2+1.6);
+        if(phase<.8)return 0;if(phase<.8+travel)return -(phase-.8)*26;
+        if(phase<1.6+travel)return -distance;return -distance+(phase-1.6-travel)*26;
+    }
+    static string FormatTime(double milliseconds)
+    {
+        long seconds=(long)Math.Floor(Math.Max(0,milliseconds)/1000);
+        return seconds>=3600?(seconds/3600)+":"+((seconds/60)%60).ToString("00")+":"+(seconds%60).ToString("00"):(seconds/60).ToString("00")+":"+(seconds%60).ToString("00");
     }
 
     static double TextWidth(string text,TextBlock style)

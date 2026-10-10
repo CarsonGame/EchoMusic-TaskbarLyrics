@@ -36,7 +36,11 @@ export const DEFAULTS = Object.freeze({
   "controlsAlignment": "left",
   "showCover": true,
   "coverShape": "rectangle",
-  "rotateCover": false
+  "rotateCover": false,
+  "hoverProgress": true,
+  "smartContrast": true,
+  "trackTransitions": true,
+  "transitionDuration": 280
 });
 export function normalize(value = {}) {
   const s = { ...DEFAULTS, ...value };
@@ -47,13 +51,13 @@ export function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',30,100],['controlsBackgroundOpacity',0,100]]) {
+  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
   for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']]]) {
     if (!values.includes(s[key])) s[key] = DEFAULTS[key];
   }
-  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground']) s[key] = Boolean(s[key]);
+  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','smartContrast','trackTransitions']) s[key] = Boolean(s[key]);
   for (const key of ['primaryColor','secondaryColor','primaryPlayedColor','secondaryPlayedColor','controlsBackgroundColor','controlsIconColor','buttonHoverColor','buttonPressedColor']) {
     if (!/^#[\da-f]{6}$/i.test(s[key])) s[key]=DEFAULTS[key];
   }
@@ -116,6 +120,48 @@ export function controlsPalette(settings,coverAccent='') {
   const opacity=settings.controlsBackgroundOpacity;
   return {background,foreground,opacity,backgroundCss:background+Math.round(opacity*255/100).toString(16).padStart(2,'0')};
 }
+export function contrastRatio(first,second) {
+  const luminance=color=>{
+    const channels=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);
+    return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722;
+  };
+  const a=luminance(first),b=luminance(second);
+  return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+}
+export function readableCoverColor(color,backgrounds,minimum=3) {
+  // 保留色相，寻找达到可读对比度的最小亮度调整；手动颜色由调用方保留。
+  const score=value=>Math.min(...backgrounds.map(background=>contrastRatio(value,background)));
+  if(score(color)>=minimum)return color;
+  const rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));
+  let best=color,bestScore=score(color);
+  for(let step=1;step<=100;step++)for(const endpoint of [255,0]){
+    const candidate='#'+rgb.map(v=>Math.round(v+(endpoint-v)*step/100).toString(16).padStart(2,'0')).join('').toUpperCase();
+    const value=score(candidate);if(value>=minimum)return candidate;
+    if(value>bestScore){best=candidate;bestScore=value;}
+  }
+  return best;
+}
+export function blendColor(color,background,opacity) {
+  const alpha=Math.max(0,Math.min(1,opacity/100));
+  return '#'+[1,3,5].map(i=>Math.round(parseInt(color.slice(i,i+2),16)*alpha+parseInt(background.slice(i,i+2),16)*(1-alpha)).toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+export function previewPalettes(settings,accent,light=false) {
+  const played=playedPalette(settings,accent),controls=controlsPalette(settings,accent);
+  if(!settings.smartContrast)return {played,controls};
+  const background=light?'#E8EDEF':'#202831';
+  if(settings.playedColorSource==='cover')for(const key of ['primary','secondary'])played[key]=readableCoverColor(played[key],[background]);
+  if(settings.controlsIconColorSource==='cover'){
+    const base=blendColor(controls.background,background,controls.opacity),backgrounds=[base];
+    if(settings.buttonHoverBackground)backgrounds.push(settings.buttonHoverColor);
+    if(settings.buttonPressedBackground)backgrounds.push(settings.buttonPressedColor);
+    controls.foreground=readableCoverColor(controls.foreground,backgrounds);
+  }
+  return {played,controls};
+}
+export function formatPlaybackTime(milliseconds) {
+  const value=Number(milliseconds),total=Math.floor(Math.max(0,Number.isFinite(value)?value:0)/1000),seconds=String(total%60).padStart(2,'0');
+  return total>=3600?`${Math.floor(total/3600)}:${String(Math.floor(total/60)%60).padStart(2,'0')}:${seconds}`:`${String(Math.floor(total/60)).padStart(2,'0')}:${seconds}`;
+}
 export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='') {
   const p = snapshot.playback ?? {};
   const lyric = snapshot.lyric ?? {};
@@ -160,7 +206,8 @@ export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='') 
     playedPalette:playedPalette(settings,coverAccent),
     controlsPalette:controlsPalette(settings,coverAccent),
     settings, text, secondary, playing: Boolean(p.isPlaying), advancing:Boolean(advancing), hasTrack: Boolean(p.trackId || p.title),
-    trackId:String(p.trackId || ''), isFavorite:Boolean(p.isFavorite), coverUrl:String(p.coverUrl || ''), coverTimeMs,
+    trackId:String(p.trackId || ''), title:String(p.title || ''), artist:String(p.artist || ''), isFavorite:Boolean(p.isFavorite), coverUrl:String(p.coverUrl || ''), coverTimeMs,
+    durationMs:Number.isFinite(durationMs) && durationMs>0?durationMs:0,
     lyricKey: `${p.trackId || ''}:${index}`, timelineMs: ms,
     lineStartMs: canScroll ? startMs : 0, lineEndMs: canScroll ? endMs : 0,
     playbackRate,
