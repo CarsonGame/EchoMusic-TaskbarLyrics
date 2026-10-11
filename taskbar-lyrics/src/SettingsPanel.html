@@ -70,7 +70,7 @@
     </section>
 
     <section class="tl-section"><div class="tl-section-heading"><h3>歌曲封面</h3><p>为任务栏加上一点专辑的色彩。</p></div>
-      <div class="tl-toggle"><div><span>显示歌曲封面</span><p>封面显示在歌词左侧，鼠标放在封面上显示歌名与演唱者，过长时自动滚动。</p></div><Switch v-model="draft.showCover" /></div>
+      <div class="tl-toggle"><div><span>显示歌曲封面</span><p>点击封面唤出 EchoMusic 主界面；悬停显示歌名与演唱者，过长时自动滚动。</p></div><Switch v-model="draft.showCover" /></div>
       <div v-if="draft.showCover" class="tl-dependent">
         <div class="tl-field"><label>封面形状</label><Select v-model="draft.coverShape" :options="coverShapeOptions" /></div>
         <div v-if="draft.coverShape === 'circle'" class="tl-toggle tl-inner-toggle"><div><span>圆形封面旋转</span><p>播放时旋转，暂停时停留。</p></div><Switch v-model="draft.rotateCover" /></div>

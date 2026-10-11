@@ -66,6 +66,8 @@ sealed class TaskbarLyrics
 
     Window window;
     Grid coverHost,coverVisual,coverLayers,lyricsHost,controlsAnchor;
+    Button coverButton;
+    static bool mainWindowPending;
     StackPanel lyricsText;
     StackPanel songInfo;
     Grid songTitleViewport,songArtistViewport;
@@ -245,6 +247,8 @@ sealed class TaskbarLyrics
             primaryAccent=(SolidColorBrush)window.Resources["PrimaryAccent"];secondaryAccent=(SolidColorBrush)window.Resources["SecondaryAccent"];
             primaryProgress=(LinearGradientBrush)window.Resources["PrimaryProgress"];secondaryProgress=(LinearGradientBrush)window.Resources["SecondaryProgress"];
             coverHost=(Grid)window.FindName("CoverHost");coverVisual=(Grid)window.FindName("CoverVisual");
+            coverButton=(Button)window.FindName("CoverButton");
+            coverButton.Click+=(sender,e)=>ShowMainWindow();
             lyricsHost=(Grid)window.FindName("LyricsHost");lyricsText=(StackPanel)window.FindName("LyricsText");
             lyricTransitionShift=(TranslateTransform)window.FindName("LyricTransitionShift");
             lyricTransitionScale=(ScaleTransform)window.FindName("LyricTransitionScale");
@@ -443,9 +447,9 @@ sealed class TaskbarLyrics
     {
         if (message == 0x21) { handled=true; return new IntPtr(3); }
         if (message == 0x84) {
-            // 按钮与进度条接收点击，其余区域仍穿透到任务栏。
+            // 封面、按钮与进度条接收点击，其余区域仍穿透到任务栏。
             var point=new Point(unchecked((short)(l.ToInt64()&0xffff)),unchecked((short)((l.ToInt64()>>16)&0xffff)));
-            handled=true;return new IntPtr(scrubbing || (hovering && (InControls(point) || InProgress(point)))?1:-1);
+            handled=true;return new IntPtr(scrubbing || (allowDisplay && InCover(point)) || (hovering && (InControls(point) || InProgress(point)))?1:-1);
         }
         return IntPtr.Zero;
     }
@@ -652,6 +656,18 @@ sealed class TaskbarLyrics
         return new System.Windows.Rect(first,last).Contains(screen);
     }
     static double ClampRatio(double value){return double.IsNaN(value)?0:Math.Max(0,Math.Min(1,value));}
+    async void ShowMainWindow()
+    {
+        if(!coverEnabled || !allowDisplay || mainWindowPending)return;
+        // 唤出主窗口不占用歌曲操作锁，所有屏幕合并重复点击。
+        mainWindowPending=true;
+        try{
+            var url=new UriBuilder(stateEndpoint);url.Path="/show-main";
+            using(var response=await actions.PostAsync(url.Uri,new ByteArrayContent(new byte[0])))
+                if(!response.IsSuccessStatusCode)Log("显示播放器失败：HTTP "+(int)response.StatusCode);
+        }catch(Exception error){Log("显示播放器失败："+error.Message);}
+        finally{mainWindowPending=false;}
+    }
     void BeginScrub(double ratio)
     {
         if(!progressEnabled || !allowDisplay || !hasControlTrack || frameBusy || actionPending || scrubOwner!=null)return;

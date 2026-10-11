@@ -52,8 +52,8 @@
     <Grid x:Name="TaskbarContent">
     <Grid.RenderTransform><TranslateTransform x:Name="VerticalShift"/></Grid.RenderTransform>
     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <Grid x:Name="CoverHost" Width="36" Height="36" Margin="4,0,4,0" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
-      <Grid x:Name="CoverVisual" RenderTransformOrigin="0.5,0.5">
+    <Grid x:Name="CoverHost" Width="36" Height="36" Margin="4,0,4,0" VerticalAlignment="Center" Visibility="Collapsed">
+      <Grid x:Name="CoverVisual" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
         <Grid.RenderTransform><RotateTransform x:Name="CoverRotation"/></Grid.RenderTransform>
         <Grid.Resources><RectangleGeometry x:Key="CoverRectangle" Rect="0,0,36,36" RadiusX="5" RadiusY="5"/><EllipseGeometry x:Key="CoverCircle" Center="18,18" RadiusX="18" RadiusY="18"/></Grid.Resources>
         <Grid x:Name="CoverLayers">
@@ -62,6 +62,10 @@
         <Image x:Name="CoverImage" Stretch="UniformToFill" Visibility="Collapsed"/>
         </Grid>
       </Grid>
+      <!-- 固定点击层不随封面旋转，透明图片与占位图也能完整命中。 -->
+      <Button x:Name="CoverButton" Background="{StaticResource ButtonHitBackground}" Focusable="False" Cursor="Hand" ToolTipService.IsEnabled="False" AutomationProperties.Name="显示 EchoMusic 主界面">
+        <Button.Template><ControlTemplate TargetType="Button"><Grid Background="{TemplateBinding Background}"/></ControlTemplate></Button.Template>
+      </Button>
     </Grid>
     <Grid x:Name="LyricsHost" Grid.Column="1">
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>

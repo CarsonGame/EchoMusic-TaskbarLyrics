@@ -850,7 +850,7 @@ return function render(_ctx, _cache) {
                   }, null, 8, ["modelValue", "onUpdate:modelValue", "min", "max", "step"])]))
                 : _createCommentVNode("", true)
             ]),
-            _createElementVNode("section", _hoisted_65, [_cache[43] || (_cache[43] = _createElementVNode("div", { class: "tl-section-heading" }, [_createElementVNode("h3", null, "歌曲封面"), _createElementVNode("p", null, "为任务栏加上一点专辑的色彩。")], -1)), _createElementVNode("div", _hoisted_66, [_cache[40] || (_cache[40] = _createElementVNode("div", null, [_createElementVNode("span", null, "显示歌曲封面"), _createElementVNode("p", null, "封面显示在歌词左侧，鼠标放在封面上显示歌名与演唱者，过长时自动滚动。")], -1)), _createVNode(_component_Switch, {
+            _createElementVNode("section", _hoisted_65, [_cache[43] || (_cache[43] = _createElementVNode("div", { class: "tl-section-heading" }, [_createElementVNode("h3", null, "歌曲封面"), _createElementVNode("p", null, "为任务栏加上一点专辑的色彩。")], -1)), _createElementVNode("div", _hoisted_66, [_cache[40] || (_cache[40] = _createElementVNode("div", null, [_createElementVNode("span", null, "显示歌曲封面"), _createElementVNode("p", null, "点击封面唤出 EchoMusic 主界面；悬停显示歌名与演唱者，过长时自动滚动。")], -1)), _createVNode(_component_Switch, {
               modelValue: _ctx.draft.showCover,
               "onUpdate:modelValue": $event => ((_ctx.draft.showCover) = $event)
             }, null, 8, ["modelValue", "onUpdate:modelValue"])]), (_ctx.draft.showCover)
@@ -1138,6 +1138,7 @@ export async function activate(ctx) {
   let pid = 0;
   let launchPending = false;
   let commandBusy = false;
+  let mainWindowPending = false;
   let taskbarSwitchRequest;
   let noticeTaskbarTrackId='';
   let coverRevision = 1;
@@ -1250,9 +1251,25 @@ export async function activate(ctx) {
       return { status:502,body:JSON.stringify({error:error.message}) };
     } finally { clearTimeout(timer);commandWaiters.delete(finish);commandBusy=false; }
   };
+  const showMainWindow = async request => {
+    if(request.method!=='POST')return {status:405,body:''};
+    if(!settings.enabled || !settings.showCover)return {status:403,body:''};
+    if(mainWindowPending)return {status:409,body:''};
+    mainWindowPending=true;
+    try{
+      // 使用宿主接口恢复并激活主窗口，不改变播放状态或置顶设置。
+      const result=await ctx.host.showOnTop('main',{focus:true});
+      if(!result.ok)throw new Error(result.error || '无法显示 EchoMusic 主界面');
+      return {headers:{'content-type':'application/json'},body:JSON.stringify({ok:true})};
+    }catch(error){
+      ctx.toast.warning(error.message);
+      return {status:502,body:JSON.stringify({error:error.message})};
+    }finally{mainWindowPending=false;}
+  };
   const server = await ctx.webServer.listen(request => {
     if (!alive || request.query.token !== token) return { status: 403, body: '' };
     if (request.path === '/command') return control(request);
+    if (request.path === '/show-main') return showMainWindow(request);
     if (request.path === '/cover') return cover(request);
     // 原生程序报告实际屏幕，设置页使用相同的播放器下拉组件。
     if (request.path === '/displays') {
