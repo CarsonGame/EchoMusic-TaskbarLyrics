@@ -174,6 +174,12 @@ export async function activate(ctx) {
       const previewNotice=ctx.vue.computed(()=>noticePalette(draft,coverAccent.value,previewLight.value));
       const previewPalette=ctx.vue.computed(() => previewPalettes(draft,coverAccent.value,previewLight.value));
       const previewPlayed=ctx.vue.computed(() => previewPalette.value.played);
+      const previewLyricKey=ctx.vue.ref(0);
+      const previewLyricFirst=ctx.vue.computed(()=>previewLyricKey.value%2?'下一段旋律，正在靠近':'让每一句，留在此刻');
+      const previewLyricSecond=ctx.vue.computed(()=>draft.secondary==='translation'?(previewLyricKey.value%2?'The next melody is coming closer':'Keep this moment in a melody'):(previewLyricKey.value%2?'让每一句，留在此刻':'下一段旋律，正在靠近'));
+      const previewLyricSwap=()=>{previewLyricKey.value++;};
+      const lyricTransitionOptions=[{label:'淡入',value:'fade'},{label:'上移淡入',value:'up'},{label:'横向滑入',value:'slide'},{label:'缩放淡入',value:'zoom'},{label:'弹性回弹',value:'spring'},{label:'翻转展开',value:'flip'},{label:'果冻伸展',value:'jelly'},{label:'光幕扫入',value:'wipe'},{label:'下落淡入',value:'down'},{label:'斜向轻移',value:'drift'},{label:'呼吸展开',value:'breathe'},{label:'缓慢揭幕',value:'unveil'}];
+      ctx.vue.watch(()=>[draft.layout,draft.lyricTransitions,draft.lyricTransitionDuration,draft.lyricTransitionStyle],()=>{if(draft.layout==='double' && draft.lyricTransitions)previewLyricSwap();});
       const previewControls=ctx.vue.computed(() => previewPalette.value.controls);
       // 未保存的取色选项也可立即预览，关闭时保留已有手动颜色。
       ctx.vue.watch(()=>[draft.playedColorSource,draft.controlsBackgroundSource,draft.controlsIconColorSource,draft.noticeBackgroundStyle,snapshotRef.value.playback?.trackId,snapshotRef.value.playback?.coverUrl],([lyric,background,icons,notice])=>{if(lyric==='cover' || background==='cover' || icons==='cover' || notice==='cover')ensureCoverAccent(true);});
@@ -242,7 +248,7 @@ export async function activate(ctx) {
         if (settings.enabled && !pid) await start();
       });
       const reset = () => { Object.assign(draft, DEFAULTS); return save(); };
-      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewFavorite, coverFailed, setColor, restart: () => run(start) };
+      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewFavorite, coverFailed, setColor, restart: () => run(start) };
     }
   });
   ctx.ui.settings.define({ title:'任务栏歌词 · 微光', component:panel });

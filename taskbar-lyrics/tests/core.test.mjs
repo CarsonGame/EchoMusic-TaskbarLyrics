@@ -5,6 +5,15 @@ const snapshot = {
   playback:{trackId:'1',title:'歌曲',artist:'歌手',currentTime:1,updatedAt:1000,isPlaying:true,playbackRate:1,duration:10},
   lyric:{trackId:'1',timeOffset:0,lines:[{time:0,text:'第一句',translated:'one'},{time:2,text:'第二句',translated:'two'},{time:5,text:'第三句'}]}
 };
+test('双行换句动画独立保存，旧设置补齐并限制时长',()=>{
+  assert.equal(normalize({}).lyricTransitions,true);
+  assert.equal(normalize({}).lyricTransitionDuration,180);
+  assert.equal(normalize({lyricTransitions:false,lyricTransitionDuration:20}).lyricTransitions,false);
+  assert.equal(normalize({lyricTransitionDuration:20}).lyricTransitionDuration,80);
+  assert.equal(normalize({lyricTransitionDuration:900}).lyricTransitionDuration,500);
+  for(const style of ['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil'])assert.equal(normalize({lyricTransitionStyle:style}).lyricTransitionStyle,style);
+  assert.equal(normalize({lyricTransitionStyle:'invalid'}).lyricTransitionStyle,'up');
+});
 test('浮层旧配置补齐默认值，非法样式、颜色和数值恢复有效范围',()=>{
   assert.equal(normalize({}).noticeEnabled,DEFAULTS.noticeEnabled);assert.equal(normalize({}).noticeDuration,DEFAULTS.noticeDuration);
   const s=normalize({noticeEnabled:false,noticeHoldOnHover:false,noticeShowArtist:false,noticeScrollText:false,noticeDuration:Infinity,noticeFadeDuration:-10,noticeWidth:900,noticeRadius:-4,noticeGap:90,noticeTransparency:130,noticeBackgroundStyle:'invalid',noticeTextSource:'invalid',noticeBackgroundColor:'invalid'});

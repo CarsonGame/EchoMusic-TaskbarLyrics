@@ -65,7 +65,11 @@
     </Grid>
     <Grid x:Name="LyricsHost" Grid.Column="1">
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <StackPanel x:Name="LyricsText" VerticalAlignment="Center" Margin="4,1" IsHitTestVisible="False">
+    <StackPanel x:Name="LyricsText" VerticalAlignment="Center" Margin="4,1" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5">
+      <!-- 换句只移动现有歌词，横向滚动与字号独立保持。 -->
+      <StackPanel.RenderTransform><TransformGroup><ScaleTransform x:Name="LyricTransitionScale"/><TranslateTransform x:Name="LyricTransitionShift"/></TransformGroup></StackPanel.RenderTransform>
+      <!-- 扫入遮罩独立于文字的已播放配色，不增加叠字。 -->
+      <StackPanel.OpacityMask><LinearGradientBrush x:Name="LyricTransitionReveal" StartPoint="0,0" EndPoint="1,0"><GradientStop Color="White" Offset="0"/><GradientStop Color="White" Offset="1"/><GradientStop Color="Transparent" Offset="1"/><GradientStop Color="Transparent" Offset="1"/></LinearGradientBrush></StackPanel.OpacityMask>
       <Grid x:Name="PrimaryViewport" ClipToBounds="True">
       <!-- 完整文字在独立布局中排版，固定视口只裁切滚动后的画面。 -->
       <Grid Width="{Binding Width, ElementName=Primary}" HorizontalAlignment="{Binding HorizontalAlignment, ElementName=Primary}">

@@ -139,6 +139,16 @@ sealed class TaskbarLyrics
     double requestedPrimarySize=16,requestedSecondarySize=12,lyricAreaHeight=48;
     bool dualLyrics;
     object primaryCharacters=new object[0],secondaryCharacters=new object[0];
+    TranslateTransform lyricTransitionShift;
+    ScaleTransform lyricTransitionScale;
+    bool lyricTransitions,lyricTransitionSuppressed;
+    double lyricTransitionDuration=180,lyricTransitionTravel,lyricTransitionHorizontalTravel,lyricTransitionTopTravel;
+    string lyricTransitionStyle="up";
+    LinearGradientBrush lyricTransitionReveal;
+    string appliedLyricTransitionKey="";
+    static string observedLyricKey="",observedLyricTrack="";
+    static double observedLyricTimeline;
+    static readonly Stopwatch lyricTransitionClock=new Stopwatch();
     IntPtr foregroundHook, reorderHook;
     readonly WinEvent shellEvent;
     int shellRaises;
@@ -193,6 +203,9 @@ sealed class TaskbarLyrics
         {"smartContrast",true},
         {"trackTransitions",true},
         {"transitionDuration",280},
+        {"lyricTransitions",true},
+        {"lyricTransitionDuration",180},
+        {"lyricTransitionStyle","up"},
         {"noticeEnabled",true},
         {"noticeOnlyTaskbarSwitch",true},
         {"noticeDuration",2},
@@ -233,6 +246,9 @@ sealed class TaskbarLyrics
             primaryProgress=(LinearGradientBrush)window.Resources["PrimaryProgress"];secondaryProgress=(LinearGradientBrush)window.Resources["SecondaryProgress"];
             coverHost=(Grid)window.FindName("CoverHost");coverVisual=(Grid)window.FindName("CoverVisual");
             lyricsHost=(Grid)window.FindName("LyricsHost");lyricsText=(StackPanel)window.FindName("LyricsText");
+            lyricTransitionShift=(TranslateTransform)window.FindName("LyricTransitionShift");
+            lyricTransitionScale=(ScaleTransform)window.FindName("LyricTransitionScale");
+            lyricTransitionReveal=(LinearGradientBrush)window.FindName("LyricTransitionReveal");
             songInfo=(StackPanel)window.FindName("SongInfo");songTitleViewport=(Grid)window.FindName("SongTitleViewport");songArtistViewport=(Grid)window.FindName("SongArtistViewport");
             songTitle=(TextBlock)window.FindName("SongTitle");songArtist=(TextBlock)window.FindName("SongArtist");
             songTitleShift=(TranslateTransform)window.FindName("SongTitleShift");songArtistShift=(TranslateTransform)window.FindName("SongArtistShift");
@@ -588,6 +604,7 @@ sealed class TaskbarLyrics
         bool showLyrics=!(coverHovered || (hovering && (hoverEnabled || progressHovered)));
         // 先恢复字号与测量，再显示歌词，避免等下一次快照时闪动。
         SizeLyrics(showLyrics);
+        if(!showLyrics){lyricTransitionSuppressed=true;ResetLyricTransition();}
         lyricsText.Visibility=showLyrics?Visibility.Visible:Visibility.Hidden;
         progressBed.Height=progressFill.Height=progressHovered?6:3;
         progressThumb.Visibility=progressHovered?Visibility.Visible:Visibility.Collapsed;
@@ -940,6 +957,7 @@ sealed class TaskbarLyrics
         RefreshControls();
         // 暂停或缓冲时停止计时，恢复只从新的宿主锚点开始。
         if(clockAdvancing)lyricClock.Restart();else lyricClock.Reset();
+        UpdateLyricTransition(frame,s,nextTrack);
         RenderScroll(null,EventArgs.Empty);
         Rect actual;GetWindowRect(handle,out actual);
         // WPF 切换 DPI 会调整窗口尺寸，按实际边界校正，避免沿用旧屏幕尺寸。
@@ -1090,6 +1108,83 @@ sealed class TaskbarLyrics
         UpdateStops(secondary,secondaryCharacters,ref secondaryProfileKey,ref secondaryStops);
     }
 
+    void UpdateLyricTransition(Dictionary<string,object> frame,Dictionary<string,object> s,string track)
+    {
+        lyricTransitions=Convert.ToBoolean(s["lyricTransitions"]);
+        lyricTransitionDuration=Convert.ToDouble(s["lyricTransitionDuration"]);
+        string key=frame.ContainsKey("lyricKey")?Convert.ToString(frame["lyricKey"]):track+":"+lineStartMs;
+        string nextStyle=Convert.ToString(s["lyricTransitionStyle"]);
+        if(lyricTransitionStyle!=nextStyle && appliedLyricTransitionKey==key)lyricTransitionSuppressed=true;
+        lyricTransitionStyle=nextStyle;
+        if(key!=observedLyricKey || track!=observedLyricTrack){
+            // 同曲正常换句才播放；首次显示、切歌和跳转直接同步。
+            bool animate=observedLyricTrack==track && observedLyricKey!="" && clockAdvancing && Math.Abs(timelineMs-observedLyricTimeline)<1500 && lineEndMs-lineStartMs>=100 && scrubOwner==null && pendingSeekMs<0;
+            observedLyricKey=key;observedLyricTrack=track;
+            if(animate && dualLyrics && lyricTransitions)lyricTransitionClock.Restart();else lyricTransitionClock.Reset();
+        }
+        observedLyricTimeline=timelineMs;
+        if(appliedLyricTransitionKey!=key){
+            appliedLyricTransitionKey=key;lyricTransitionSuppressed=lyricsText.Visibility!=Visibility.Visible;
+            ResetLyricTransition();window.UpdateLayout();
+            var root=(Grid)window.Content;
+            Point bottom=lyricsText.TransformToAncestor(root).Transform(new Point(0,lyricsText.ActualHeight));
+            // 空间不足时只淡入，避免移动时裁切任务栏边缘。
+            lyricTransitionTravel=Math.Min(3,Math.Max(0,root.ActualHeight-bottom.Y-1));
+            Point right=lyricsText.TransformToAncestor(root).Transform(new Point(lyricsText.ActualWidth,0));
+            lyricTransitionHorizontalTravel=Math.Min(6,Math.Max(0,root.ActualWidth-right.X-1));
+            Point top=lyricsText.TransformToAncestor(root).Transform(new Point(0,0));
+            lyricTransitionTopTravel=Math.Min(2,Math.Max(0,top.Y-1));
+        }
+        if(!lyricTransitions || !dualLyrics)lyricTransitionSuppressed=true;
+    }
+    void RenderLyricTransition()
+    {
+        if(!clockAdvancing)lyricTransitionSuppressed=true;
+        double duration=Math.Min(lyricTransitionDuration,Math.Max(40,(lineEndMs-lineStartMs)*.35));
+        double phase=lyricTransitionClock.Elapsed.TotalMilliseconds/duration;
+        bool active=lyricTransitions && dualLyrics && !lyricTransitionSuppressed && clockAdvancing && lyricTransitionClock.IsRunning && phase<1;
+        double remaining=active?Math.Pow(1-Math.Max(0,phase),3):0;
+        lyricsText.Opacity=1-.55*remaining;
+        lyricTransitionShift.X=lyricTransitionStyle=="slide"?lyricTransitionHorizontalTravel*remaining:0;
+        lyricTransitionShift.Y=lyricTransitionStyle=="up"?lyricTransitionTravel*remaining:0;
+        // 缩放只作用于绘制，不改字号、排版或进度遮罩的坐标。
+        lyricTransitionScale.ScaleX=lyricTransitionScale.ScaleY=lyricTransitionStyle=="zoom"?1-.03*remaining:1;
+        double progress=active?ClampRatio(phase):1;
+        // 回弹始终收在原范围内，避免任务栏边缘裁字。
+        if(lyricTransitionStyle=="spring")lyricTransitionScale.ScaleX=lyricTransitionScale.ScaleY=LyricKeyframe(progress,.88,1,.965,1);
+        if(lyricTransitionStyle=="flip")lyricTransitionScale.ScaleY=1-.94*remaining;
+        if(lyricTransitionStyle=="jelly"){
+            lyricTransitionScale.ScaleX=LyricKeyframe(progress,.78,1,.94,1);
+            lyricTransitionScale.ScaleY=LyricKeyframe(progress,1,.82,1,1);
+        }
+        // 柔和样式以平滑起停和较小振幅保持文字可读。
+        double gentleRemaining=1-progress*progress*(3-2*progress);
+        if(lyricTransitionStyle=="down" || lyricTransitionStyle=="drift" || lyricTransitionStyle=="breathe" || lyricTransitionStyle=="unveil")lyricsText.Opacity=1-.3*gentleRemaining;
+        if(lyricTransitionStyle=="down")lyricTransitionShift.Y=-lyricTransitionTopTravel*gentleRemaining;
+        if(lyricTransitionStyle=="drift"){
+            lyricTransitionShift.X=Math.Min(3,lyricTransitionHorizontalTravel)*gentleRemaining;
+            lyricTransitionShift.Y=Math.Min(1.5,lyricTransitionTravel)*gentleRemaining;
+        }
+        if(lyricTransitionStyle=="breathe")lyricTransitionScale.ScaleY=1-.06*gentleRemaining;
+        RenderLyricReveal(lyricTransitionStyle=="wipe"?1-remaining:lyricTransitionStyle=="unveil"?1-gentleRemaining:1,lyricTransitionStyle=="unveil");
+    }
+    // 分段平滑插值与预览使用相同关键帧，最后回到原比例。
+    static double LyricKeyframe(double progress,double first,double second,double third,double last){
+        double start,end,local;
+        if(progress<.55){start=first;end=second;local=progress/.55;}
+        else if(progress<.78){start=second;end=third;local=(progress-.55)/.23;}
+        else{start=third;end=last;local=(progress-.78)/.22;}
+        return start+(end-start)*local*local*(3-2*local);
+    }
+    void RenderLyricReveal(double progress,bool vertical=false){
+        Point direction=new Point(vertical?0:1,vertical?1:0);
+        if(lyricTransitionReveal.EndPoint!=direction)lyricTransitionReveal.EndPoint=direction;
+        double softness=vertical?.35:.16;
+        lyricTransitionReveal.GradientStops[1].Offset=progress>=1?1:ClampRatio(progress*(1+softness)-softness);
+        lyricTransitionReveal.GradientStops[2].Offset=progress>=1?1:ClampRatio(progress*(1+softness));
+    }
+    void ResetLyricTransition(){lyricsText.Opacity=1;lyricTransitionShift.X=lyricTransitionShift.Y=0;lyricTransitionScale.ScaleX=lyricTransitionScale.ScaleY=1;RenderLyricReveal(1);}
+
     void RenderScroll(object sender,EventArgs e)
     {
         RenderTrackNotice();
@@ -1127,6 +1222,7 @@ sealed class TaskbarLyrics
         secondaryMaskWidth=secondaryMasking?MaskWidth(secondaryStops,current,progress,secondaryTextWidth):0;
         ColorProgress(primary,primaryProgress,primaryWaiting,masking,primaryMaskWidth,primaryTextWidth);
         ColorProgress(secondary,secondaryProgress,secondaryWaiting,secondaryMasking,secondaryMaskWidth,secondaryTextWidth);
+        RenderLyricTransition();
     }
     static void ColorProgress(TextBlock text,LinearGradientBrush brush,SolidColorBrush waiting,bool enabled,double playedWidth,double textWidth)
     {

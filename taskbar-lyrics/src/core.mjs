@@ -41,6 +41,9 @@ export const DEFAULTS = Object.freeze({
   "smartContrast": true,
   "trackTransitions": true,
   "transitionDuration": 280,
+  "lyricTransitions": true,
+  "lyricTransitionDuration": 180,
+  "lyricTransitionStyle": "up",
   "noticeEnabled": true,
   "noticeOnlyTaskbarSwitch": true,
   "noticeDuration": 2,
@@ -70,13 +73,13 @@ export function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000],['noticeDuration',1,30],['noticeFadeDuration',0,1000],['noticeTransparency',0,100],['noticeWidth',180,480],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24],['noticeArtistFontSize',8,20]]) {
+  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeDuration',1,30],['noticeFadeDuration',0,1000],['noticeTransparency',0,100],['noticeWidth',180,480],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24],['noticeArtistFontSize',8,20]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
-  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom']],['noticeTextAlignment',['left','center']]]) {
+  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
     if (!values.includes(s[key])) s[key] = DEFAULTS[key];
   }
-  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','smartContrast','trackTransitions','noticeEnabled','noticeOnlyTaskbarSwitch','noticeHoldOnHover','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);
+  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','smartContrast','trackTransitions','lyricTransitions','noticeEnabled','noticeOnlyTaskbarSwitch','noticeHoldOnHover','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);
   for (const key of ['primaryColor','secondaryColor','primaryPlayedColor','secondaryPlayedColor','controlsBackgroundColor','controlsIconColor','buttonHoverColor','buttonPressedColor','noticeBackgroundColor','noticeTitleColor','noticeArtistColor']) {
     if (!/^#[\da-f]{6}$/i.test(s[key])) s[key]=DEFAULTS[key];
   }

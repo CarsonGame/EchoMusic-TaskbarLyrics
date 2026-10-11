@@ -145,5 +145,34 @@
 .tl-field .echo-select-value{flex:1;min-width:0}
 .tl-field .echo-select-search{width:100%;min-width:0}
 @keyframes tl-disc-spin{to{transform:rotate(360deg)}}
+.tl-caption .tl-preview-demo{height:24px;min-height:24px;padding:0 8px;border-radius:7px;font-size:10px;color:inherit;background:var(--tl-soft);border:1px solid var(--tl-border)}
+.tl-lyric-switch{animation:tl-lyric-enter var(--tl-lyric-duration,180ms) cubic-bezier(.2,.7,.2,1) both}
+.tl-lyric-switch.tl-lyric-fade{animation-name:tl-lyric-fade}
+.tl-lyric-switch.tl-lyric-slide{animation-name:tl-lyric-slide}
+.tl-lyric-switch.tl-lyric-zoom{animation-name:tl-lyric-zoom;transform-origin:center}
+.tl-lyric-switch.tl-lyric-spring{animation-name:tl-lyric-spring;animation-timing-function:cubic-bezier(.333,0,.667,1)}
+.tl-lyric-switch.tl-lyric-flip{animation-name:tl-lyric-flip}
+.tl-lyric-switch.tl-lyric-jelly{animation-name:tl-lyric-jelly;animation-timing-function:cubic-bezier(.333,0,.667,1)}
+/* 内层播放换句动画，外层的悬停隐藏不会被关键帧覆盖。 */
+.tl-lyric-switch.tl-lyric-wipe{animation-name:tl-lyric-wipe;mask-image:linear-gradient(to right,#fff var(--tl-reveal-edge),transparent calc(var(--tl-reveal-edge) + 16%))}
+@property --tl-reveal-edge{syntax:"<percentage>";inherits:false;initial-value:100%}
+.tl-preview-lyric-motion{transform-origin:center}
+.tl-lyric-switch.tl-lyric-down{animation-name:tl-lyric-down;animation-timing-function:cubic-bezier(.333,0,.667,1)}
+.tl-lyric-switch.tl-lyric-drift{animation-name:tl-lyric-drift;animation-timing-function:cubic-bezier(.333,0,.667,1)}
+.tl-lyric-switch.tl-lyric-breathe{animation-name:tl-lyric-breathe;animation-timing-function:cubic-bezier(.333,0,.667,1)}
+.tl-lyric-switch.tl-lyric-unveil{animation-name:tl-lyric-unveil;animation-timing-function:cubic-bezier(.333,0,.667,1);mask-image:linear-gradient(to bottom,#fff var(--tl-reveal-edge),transparent calc(var(--tl-reveal-edge) + 35%))}
+@keyframes tl-lyric-enter{from{opacity:.45;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tl-lyric-fade{from{opacity:.45}to{opacity:1}}
+@keyframes tl-lyric-slide{from{opacity:.45;transform:translateX(3px)}to{opacity:1;transform:translateX(0)}}
+@keyframes tl-lyric-zoom{from{opacity:.45;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+@keyframes tl-lyric-spring{0%{opacity:.45;transform:scale(.88)}55%{opacity:.95;transform:scale(1)}78%{opacity:1;transform:scale(.965)}100%{opacity:1;transform:scale(1)}}
+@keyframes tl-lyric-flip{from{opacity:.45;transform:scaleY(.06)}to{opacity:1;transform:scaleY(1)}}
+@keyframes tl-lyric-jelly{0%{opacity:.45;transform:scale(.78,1)}55%{opacity:.95;transform:scale(1,.82)}78%{opacity:1;transform:scale(.94,1)}100%{opacity:1;transform:scale(1)}}
+@keyframes tl-lyric-wipe{from{opacity:.45;--tl-reveal-edge:-16%}to{opacity:1;--tl-reveal-edge:100%}}
+@keyframes tl-lyric-down{from{opacity:.7;transform:translateY(-2px)}to{opacity:1;transform:translateY(0)}}
+@keyframes tl-lyric-drift{from{opacity:.7;transform:translate(3px,1.5px)}to{opacity:1;transform:translate(0,0)}}
+@keyframes tl-lyric-breathe{from{opacity:.7;transform:scaleY(.94)}to{opacity:1;transform:scaleY(1)}}
+@keyframes tl-lyric-unveil{from{opacity:.7;--tl-reveal-edge:-35%}to{opacity:1;--tl-reveal-edge:100%}}
+@media(prefers-reduced-motion:reduce){.tl-lyric-switch{animation:none}}
 @media(max-width:520px){.tl-grid,.tl-type-grid{grid-template-columns:minmax(0,1fr)}.tl-span{grid-column:auto}.tl-section{padding:15px}.tl-header{gap:12px}.tl-enable-control>span{display:none}.tl-settings h2{font-size:19px}.tl-preview{padding:10px}.tl-caption{font-size:10px}}
 @media(prefers-reduced-motion:reduce){.tl-actions .tl-action-button{transition:none}.tl-actions .tl-action-button:hover:not(:disabled){transform:none}}
