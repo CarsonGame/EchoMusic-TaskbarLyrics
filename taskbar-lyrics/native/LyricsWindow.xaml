@@ -42,7 +42,7 @@
           <!-- 按下状态优先，两种背景可分别关闭。 -->
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource ButtonHoverBackground}"/></Trigger>
           <Trigger Property="IsPressed" Value="True"><Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource ButtonPressedBackground}"/></Trigger>
-          <Trigger Property="IsEnabled" Value="False"><Setter TargetName="ButtonSurface" Property="Opacity" Value="0.4"/></Trigger>
+          <!-- 忙碌期间保留原亮度，IsEnabled 仍阻止重复点击。 -->
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
