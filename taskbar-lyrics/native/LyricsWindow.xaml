@@ -4,8 +4,29 @@
         AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
         ShowActivated="False" Topmost="True" Focusable="False" Width="360" Height="48">
   <Window.Resources>
+    <SolidColorBrush x:Key="PrimaryWaiting" Color="#F1F7F6"/>
+    <SolidColorBrush x:Key="SecondaryWaiting" Color="#B4C3C1"/>
+    <SolidColorBrush x:Key="PrimaryAccent" Color="#85DCD0"/>
+    <SolidColorBrush x:Key="SecondaryAccent" Color="#85DCD0"/>
+    <SolidColorBrush x:Key="NoticeBackground" Color="#CC282B30"/>
+    <SolidColorBrush x:Key="NoticeTitleInk" Color="#F1F7F6"/>
+    <SolidColorBrush x:Key="NoticeArtistInk" Color="#BFC5CA"/>
+    <!-- 同一份字形使用硬边双色画刷，不叠加第二层文字。 -->
+    <LinearGradientBrush x:Key="PrimaryProgress" MappingMode="Absolute" StartPoint="0,0" EndPoint="300,0">
+      <GradientStop Offset="0" Color="{Binding Color, Source={StaticResource PrimaryAccent}}"/>
+      <GradientStop Offset="0" Color="{Binding Color, Source={StaticResource PrimaryAccent}}"/>
+      <GradientStop Offset="0" Color="{Binding Color, Source={StaticResource PrimaryWaiting}}"/>
+      <GradientStop Offset="1" Color="{Binding Color, Source={StaticResource PrimaryWaiting}}"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="SecondaryProgress" MappingMode="Absolute" StartPoint="0,0" EndPoint="300,0">
+      <GradientStop Offset="0" Color="{Binding Color, Source={StaticResource SecondaryAccent}}"/>
+      <GradientStop Offset="0" Color="{Binding Color, Source={StaticResource SecondaryAccent}}"/>
+      <GradientStop Offset="0" Color="{Binding Color, Source={StaticResource SecondaryWaiting}}"/>
+      <GradientStop Offset="1" Color="{Binding Color, Source={StaticResource SecondaryWaiting}}"/>
+    </LinearGradientBrush>
     <SolidColorBrush x:Key="ButtonHoverBackground" Color="Transparent"/>
     <SolidColorBrush x:Key="ButtonPressedBackground" Color="Transparent"/>
+    <SolidColorBrush x:Key="ButtonHitBackground" Color="#01000000"/>
     <Style x:Key="ControlButton" TargetType="Button">
       <Setter Property="Width" Value="30"/><Setter Property="Height" Value="30"/>
       <Setter Property="Margin" Value="2,0"/><Setter Property="Padding" Value="7"/>
@@ -13,7 +34,10 @@
       <Setter Property="Focusable" Value="False"/><Setter Property="Cursor" Value="Hand"/>
       <Setter Property="ToolTipService.IsEnabled" Value="False"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-        <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+        <!-- 极低透明度底层保留整块点击区域，不受悬停、按下背景开关影响。 -->
+        <Grid Background="{StaticResource ButtonHitBackground}">
+          <Border x:Name="ButtonSurface" Background="{TemplateBinding Background}" CornerRadius="15" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+        </Grid>
         <ControlTemplate.Triggers>
           <!-- 按下状态优先，两种背景可分别关闭。 -->
           <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ButtonSurface" Property="Background" Value="{DynamicResource ButtonHoverBackground}"/></Trigger>
@@ -43,36 +67,29 @@
     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel x:Name="LyricsText" VerticalAlignment="Center" Margin="4,1" IsHitTestVisible="False">
       <Grid x:Name="PrimaryViewport" ClipToBounds="True">
+      <!-- 完整文字在独立布局中排版，固定视口只裁切滚动后的画面。 -->
+      <Grid Width="{Binding Width, ElementName=Primary}" HorizontalAlignment="{Binding HorizontalAlignment, ElementName=Primary}">
       <TextBlock x:Name="Primary" Text="让每一句，留在此刻" FontFamily="Microsoft YaHei UI, Segoe UI"
-                 HorizontalAlignment="Left" FontSize="16" FontWeight="Medium" Foreground="#F1F7F6" TextTrimming="None" TextWrapping="NoWrap">
+                 HorizontalAlignment="Left" FontSize="16" FontWeight="Medium" Foreground="{StaticResource PrimaryWaiting}" TextTrimming="None" TextWrapping="NoWrap">
         <TextBlock.RenderTransform><TranslateTransform x:Name="PrimaryShift"/></TextBlock.RenderTransform>
         <TextBlock.Effect><DropShadowEffect BlurRadius="3" ShadowDepth="1" Opacity="0.3"/></TextBlock.Effect>
       </TextBlock>
-      <TextBlock x:Name="PrimaryPlayed" Text="{Binding Text, ElementName=Primary}" FontFamily="{Binding FontFamily, ElementName=Primary}"
-                 FontSize="{Binding FontSize, ElementName=Primary}" FontWeight="{Binding FontWeight, ElementName=Primary}"
-                 Width="{Binding Width, ElementName=Primary}" TextTrimming="{Binding TextTrimming, ElementName=Primary}"
-                 RenderTransform="{Binding RenderTransform, ElementName=Primary}" HorizontalAlignment="Left" TextWrapping="NoWrap" Foreground="#85DCD0" Visibility="Collapsed">
-        <TextBlock.Clip><RectangleGeometry x:Name="PrimaryMask" Rect="0,0,0,48"/></TextBlock.Clip>
-      </TextBlock>
+      </Grid>
       </Grid>
       <Grid x:Name="SecondaryViewport" ClipToBounds="True" Visibility="Collapsed" Margin="0,1,0,0">
+      <Grid Width="{Binding Width, ElementName=Secondary}" HorizontalAlignment="{Binding HorizontalAlignment, ElementName=Secondary}">
       <TextBlock x:Name="Secondary" Text="下一段旋律，正在靠近" FontFamily="Microsoft YaHei UI, Segoe UI"
-                 HorizontalAlignment="Left" FontSize="12" Foreground="#B4C3C1" Visibility="Collapsed"
+                 HorizontalAlignment="Left" FontSize="12" Foreground="{StaticResource SecondaryWaiting}" Visibility="Collapsed"
                  TextTrimming="CharacterEllipsis" TextWrapping="NoWrap">
         <TextBlock.RenderTransform><TranslateTransform x:Name="SecondaryShift"/></TextBlock.RenderTransform>
       </TextBlock>
-      <TextBlock x:Name="SecondaryPlayed" Text="{Binding Text, ElementName=Secondary}" FontFamily="{Binding FontFamily, ElementName=Secondary}"
-                 FontSize="{Binding FontSize, ElementName=Secondary}" Width="{Binding Width, ElementName=Secondary}"
-                 TextTrimming="{Binding TextTrimming, ElementName=Secondary}" RenderTransform="{Binding RenderTransform, ElementName=Secondary}"
-                 HorizontalAlignment="Left" TextWrapping="NoWrap" Foreground="#85DCD0" Visibility="Collapsed">
-        <TextBlock.Clip><RectangleGeometry x:Name="SecondaryMask" Rect="0,0,0,48"/></TextBlock.Clip>
-      </TextBlock>
+      </Grid>
       </Grid>
     </StackPanel>
     <!-- 封面悬停信息独立于歌词时钟，长文字只在溢出时滚动。 -->
     <StackPanel x:Name="SongInfo" Grid.RowSpan="2" Margin="4,1" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False">
-      <Grid x:Name="SongTitleViewport" ClipToBounds="True"><TextBlock x:Name="SongTitle" FontSize="14" FontWeight="Medium" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="SongTitleShift"/></TextBlock.RenderTransform></TextBlock></Grid>
-      <Grid x:Name="SongArtistViewport" ClipToBounds="True" Margin="0,1,0,0"><TextBlock x:Name="SongArtist" FontSize="11" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="SongArtistShift"/></TextBlock.RenderTransform></TextBlock></Grid>
+      <Grid x:Name="SongTitleViewport" ClipToBounds="True"><Grid Width="{Binding Width, ElementName=SongTitle}" HorizontalAlignment="Left"><TextBlock x:Name="SongTitle" FontSize="14" FontWeight="Medium" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="SongTitleShift"/></TextBlock.RenderTransform></TextBlock></Grid></Grid>
+      <Grid x:Name="SongArtistViewport" ClipToBounds="True" Margin="0,1,0,0"><Grid Width="{Binding Width, ElementName=SongArtist}" HorizontalAlignment="Left"><TextBlock x:Name="SongArtist" FontSize="11" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="SongArtistShift"/></TextBlock.RenderTransform></TextBlock></Grid></Grid>
     </StackPanel>
     <!-- 居中按文字定位，并保留固定按钮宽度。 -->
     <Grid x:Name="ControlsAnchor" HorizontalAlignment="Left" Margin="4,0,4,0">
@@ -94,11 +111,21 @@
     <Grid x:Name="ProgressHost" Grid.Row="1" Width="144" Height="12" HorizontalAlignment="Left" Margin="7,0,0,2" Visibility="Collapsed">
       <Grid x:Name="ProgressTrack" Background="Transparent" Cursor="Hand" ToolTipService.IsEnabled="False" AutomationProperties.Name="歌曲播放进度">
         <Border x:Name="ProgressBed" Height="3" CornerRadius="3" Background="#60888888" IsHitTestVisible="False"/>
-        <Border x:Name="ProgressFill" Width="0" Height="3" HorizontalAlignment="Left" CornerRadius="2" Background="{Binding Foreground, ElementName=PrimaryPlayed}" IsHitTestVisible="False"/>
-        <Ellipse x:Name="ProgressThumb" Width="8" Height="8" HorizontalAlignment="Left" Fill="{Binding Foreground, ElementName=PrimaryPlayed}" Visibility="Collapsed" IsHitTestVisible="False"/>
+        <Border x:Name="ProgressFill" Width="0" Height="3" HorizontalAlignment="Left" CornerRadius="2" Background="{StaticResource PrimaryAccent}" IsHitTestVisible="False"/>
+        <Ellipse x:Name="ProgressThumb" Width="8" Height="8" HorizontalAlignment="Left" Fill="{StaticResource PrimaryAccent}" Visibility="Collapsed" IsHitTestVisible="False"/>
       </Grid>
     </Grid>
     </Grid>
     </Grid>
+    <!-- 浮层使用独立弹出区域，不压缩任务栏内的歌词和按钮。 -->
+    <Popup x:Name="TrackNotice" Placement="Custom" PlacementTarget="{Binding ElementName=LyricsHost}" AllowsTransparency="True" StaysOpen="True" Focusable="False">
+      <Border x:Name="TrackNoticeSurface" Width="280" CornerRadius="12" Padding="12,9" Background="{StaticResource NoticeBackground}" BorderThickness="1" SnapsToDevicePixels="True">
+        <Border.BorderBrush><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#40FFFFFF" Offset="0"/><GradientStop Color="#18FFFFFF" Offset="1"/></LinearGradientBrush></Border.BorderBrush>
+        <StackPanel>
+          <Grid x:Name="NoticeTitleViewport" ClipToBounds="True"><Grid Width="{Binding Width, ElementName=NoticeTitle}" HorizontalAlignment="{Binding HorizontalAlignment, ElementName=NoticeTitle}"><TextBlock x:Name="NoticeTitle" FontSize="13" FontWeight="Medium" Foreground="{StaticResource NoticeTitleInk}" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="NoticeTitleShift"/></TextBlock.RenderTransform></TextBlock></Grid></Grid>
+          <Grid x:Name="NoticeArtistViewport" ClipToBounds="True" Margin="0,3,0,0"><Grid Width="{Binding Width, ElementName=NoticeArtist}" HorizontalAlignment="{Binding HorizontalAlignment, ElementName=NoticeArtist}"><TextBlock x:Name="NoticeArtist" FontSize="11" Foreground="{StaticResource NoticeArtistInk}" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="NoticeArtistShift"/></TextBlock.RenderTransform></TextBlock></Grid></Grid>
+        </StackPanel>
+      </Border>
+    </Popup>
   </Grid>
 </Window>

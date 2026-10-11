@@ -1,4 +1,4 @@
-import { DEFAULTS, normalize, makeFrame, coverAccentFromPixels, previewPalettes, formatPlaybackTime } from './core.mjs';
+import { DEFAULTS, normalize, makeFrame, coverAccentFromPixels, previewPalettes, noticePalette, formatPlaybackTime } from './core.mjs';
 // @compiled-panel
 export async function activate(ctx) {
   if (ctx.electron.platform !== 'win32') throw new Error('此插件仅支持 Windows。');
@@ -8,6 +8,8 @@ export async function activate(ctx) {
   let pid = 0;
   let launchPending = false;
   let commandBusy = false;
+  let taskbarSwitchRequest;
+  let noticeTaskbarTrackId='';
   let coverRevision = 1;
   let coverIdentity = `${snapshot.playback?.trackId || ''}:${snapshot.playback?.coverUrl || ''}`;
   let cachedCover;
@@ -18,6 +20,12 @@ export async function activate(ctx) {
   const displays = ctx.vue.ref([]);
   const token = crypto.randomUUID();
   const updateSnapshot = next => {
+    const trackId=String(next.playback?.trackId || ''),previousId=String(snapshot.playback?.trackId || '');
+    if(trackId!==previousId){
+      // 只标记任务栏切歌命令引起的首个新歌曲，后续自动切歌不会沿用。
+      noticeTaskbarTrackId=taskbarSwitchRequest?.trackId===previousId && Date.now()<=taskbarSwitchRequest.expires ? trackId : '';
+      taskbarSwitchRequest=undefined;
+    }
     const identity=`${next.playback?.trackId || ''}:${next.playback?.coverUrl || ''}`;
     // 切歌先保留上次成功颜色，等新封面取色完成后再替换。
     if (identity!==coverIdentity) { coverIdentity=identity;coverRevision++;cachedCover=undefined; }
@@ -26,7 +34,7 @@ export async function activate(ctx) {
     for (const waiter of commandWaiters) waiter(next);
   };
   const currentFrame = () => {
-    const frame={...makeFrame(snapshot,settings,Date.now(),coverAccent.value),commandBusy};
+    const frame={...makeFrame(snapshot,settings,Date.now(),coverAccent.value),commandBusy,noticeTaskbarTrackId};
     if (frame.coverUrl) {
       frame.coverSourceUrl=frame.coverUrl;
       frame.coverUrl=`${server.origin}/cover?token=${token}&key=${coverRevision}`;
@@ -46,7 +54,7 @@ export async function activate(ctx) {
     return cachedCover;
   };
   const ensureCoverAccent = async (preview=false) => {
-    if((settings.playedColorSource!=='cover' && settings.controlsBackgroundSource!=='cover' && settings.controlsIconColorSource!=='cover' && !preview) || accentRevision===coverRevision || !snapshot.playback?.coverUrl)return;
+    if((settings.playedColorSource!=='cover' && settings.controlsBackgroundSource!=='cover' && settings.controlsIconColorSource!=='cover' && !(settings.noticeEnabled && settings.noticeBackgroundStyle==='cover') && !preview) || accentRevision===coverRevision || !snapshot.playback?.coverUrl)return;
     const revision=coverRevision;accentRevision=revision;
     let bitmap;
     try {
@@ -81,6 +89,8 @@ export async function activate(ctx) {
     if(seeking && (!Number.isFinite(duration) || duration<=0 || before.isLoading))return {status:409,body:JSON.stringify({error:'当前歌曲暂时无法跳转'})};
     const target=seeking?Math.min(duration,Math.max(0,requested)):0;
     commandBusy = true;
+    const switchRequest=action==='previousTrack' || action==='nextTrack' ? {trackId:String(before.trackId),expires:Date.now()+7000} : undefined;
+    if(switchRequest)taskbarSwitchRequest=switchRequest;
     let finish, timer;
     // 等待宿主确认结果，所有屏幕共享忙碌状态，收藏按钮不自行猜测状态。
     const confirmed = new Promise(resolve => {
@@ -105,6 +115,7 @@ export async function activate(ctx) {
       if (!ok) return { status:String(snapshot.playback?.trackId)!==String(before.trackId)?409:504,body:JSON.stringify({error:'播放器尚未确认操作或歌曲已切换，请重试'}) };
       return { headers:{'content-type':'application/json'},body:JSON.stringify({ok:true,frame:{...currentFrame(),commandBusy:false}}) };
     } catch(error) {
+      if(switchRequest && taskbarSwitchRequest===switchRequest)taskbarSwitchRequest=undefined;
       ctx.toast.warning(error.message);
       return { status:502,body:JSON.stringify({error:error.message}) };
     } finally { clearTimeout(timer);commandWaiters.delete(finish);commandBusy=false; }
@@ -157,11 +168,15 @@ export async function activate(ctx) {
       const controlsAlignmentOptions=[{label:'靠左',value:'left'},{label:'随当前歌词长度居中',value:'center'}];
       const playedColorOptions=[{label:'手动设置',value:'custom'},{label:'封面自动取色',value:'cover'}];
       const controlsBackgroundOptions=[{label:'自定义颜色',value:'custom'},{label:'使用封面配色',value:'cover'}];
+      const noticeBackgroundOptions=[{label:'自定义颜色',value:'custom'},{label:'使用封面配色',value:'cover'},{label:'毛玻璃',value:'glass'}];
+      const noticeTextOptions=[{label:'自动适配背景',value:'auto'},{label:'自定义文字颜色',value:'custom'}];
+      const noticeAlignmentOptions=[{label:'居左',value:'left'},{label:'居中',value:'center'}];
+      const previewNotice=ctx.vue.computed(()=>noticePalette(draft,coverAccent.value,previewLight.value));
       const previewPalette=ctx.vue.computed(() => previewPalettes(draft,coverAccent.value,previewLight.value));
       const previewPlayed=ctx.vue.computed(() => previewPalette.value.played);
       const previewControls=ctx.vue.computed(() => previewPalette.value.controls);
       // 未保存的取色选项也可立即预览，关闭时保留已有手动颜色。
-      ctx.vue.watch(()=>[draft.playedColorSource,draft.controlsBackgroundSource,draft.controlsIconColorSource,snapshotRef.value.playback?.trackId,snapshotRef.value.playback?.coverUrl],([lyric,background,icons])=>{if(lyric==='cover' || background==='cover' || icons==='cover')ensureCoverAccent(true);});
+      ctx.vue.watch(()=>[draft.playedColorSource,draft.controlsBackgroundSource,draft.controlsIconColorSource,draft.noticeBackgroundStyle,snapshotRef.value.playback?.trackId,snapshotRef.value.playback?.coverUrl],([lyric,background,icons,notice])=>{if(lyric==='cover' || background==='cover' || icons==='cover' || notice==='cover')ensureCoverAccent(true);});
       const previewCover=ctx.vue.computed(() => snapshotRef.value.playback?.coverUrl || '');
       const previewCoverPrevious=ctx.vue.ref(''),previewCoverLoaded=ctx.vue.ref('');
       let previewCoverTimer;
@@ -198,6 +213,13 @@ export async function activate(ctx) {
           text.style.setProperty('--tl-info-duration',(distance/26*2+1.6)+'s');
         }
       }
+      function onPreviewNoticeHover(event) {
+        for(const text of event.currentTarget.querySelectorAll('.tl-notice-line span')) {
+          const distance=Math.max(0,text.scrollWidth-text.parentElement.clientWidth);
+          text.style.setProperty('--tl-info-distance',-distance+'px');
+          text.style.setProperty('--tl-info-duration',(distance/26*2+1.6)+'s');
+        }
+      }
       const coverFailed=ctx.vue.ref('');
       const previewFont = ctx.vue.computed(() => draft.fontFamily === 'follow' ? snapshot.appearance?.fontFamily || ctx.fonts.buildFamily('system-ui') : ctx.fonts.buildFamily(draft.fontFamily));
       const previewLight = ctx.vue.computed(() => {
@@ -220,7 +242,7 @@ export async function activate(ctx) {
         if (settings.enabled && !pid) await start();
       });
       const reset = () => { Object.assign(draft, DEFAULTS); return save(); };
-      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewFavorite, coverFailed, setColor, restart: () => run(start) };
+      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewFavorite, coverFailed, setColor, restart: () => run(start) };
     }
   });
   ctx.ui.settings.define({ title:'任务栏歌词 · 微光', component:panel });

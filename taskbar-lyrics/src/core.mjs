@@ -40,7 +40,26 @@ export const DEFAULTS = Object.freeze({
   "hoverProgress": true,
   "smartContrast": true,
   "trackTransitions": true,
-  "transitionDuration": 280
+  "transitionDuration": 280,
+  "noticeEnabled": true,
+  "noticeOnlyTaskbarSwitch": true,
+  "noticeDuration": 2,
+  "noticeFadeDuration": 180,
+  "noticeHoldOnHover": true,
+  "noticeBackgroundStyle": "glass",
+  "noticeBackgroundColor": "#ffffff",
+  "noticeTransparency": 100,
+  "noticeWidth": 180,
+  "noticeRadius": 15,
+  "noticeGap": 8,
+  "noticeShowArtist": true,
+  "noticeTitleFontSize": 15,
+  "noticeArtistFontSize": 12,
+  "noticeTextSource": "auto",
+  "noticeTextAlignment": "center",
+  "noticeTitleColor": "#F1F7F6",
+  "noticeArtistColor": "#BFC5CA",
+  "noticeScrollText": true
 });
 export function normalize(value = {}) {
   const s = { ...DEFAULTS, ...value };
@@ -51,14 +70,14 @@ export function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000]]) {
+  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000],['noticeDuration',1,30],['noticeFadeDuration',0,1000],['noticeTransparency',0,100],['noticeWidth',180,480],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24],['noticeArtistFontSize',8,20]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
-  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']]]) {
+  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom']],['noticeTextAlignment',['left','center']]]) {
     if (!values.includes(s[key])) s[key] = DEFAULTS[key];
   }
-  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','smartContrast','trackTransitions']) s[key] = Boolean(s[key]);
-  for (const key of ['primaryColor','secondaryColor','primaryPlayedColor','secondaryPlayedColor','controlsBackgroundColor','controlsIconColor','buttonHoverColor','buttonPressedColor']) {
+  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','smartContrast','trackTransitions','noticeEnabled','noticeOnlyTaskbarSwitch','noticeHoldOnHover','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);
+  for (const key of ['primaryColor','secondaryColor','primaryPlayedColor','secondaryPlayedColor','controlsBackgroundColor','controlsIconColor','buttonHoverColor','buttonPressedColor','noticeBackgroundColor','noticeTitleColor','noticeArtistColor']) {
     if (!/^#[\da-f]{6}$/i.test(s[key])) s[key]=DEFAULTS[key];
   }
   // Windows 显示设备标识用于跨重启保存屏幕选择。
@@ -119,6 +138,17 @@ export function controlsPalette(settings,coverAccent='') {
   const foreground=settings.controlsIconColorSource==='cover' && /^#[\da-f]{6}$/i.test(coverAccent)?coverAccent:settings.controlsIconColor;
   const opacity=settings.controlsBackgroundOpacity;
   return {background,foreground,opacity,backgroundCss:background+Math.round(opacity*255/100).toString(16).padStart(2,'0')};
+}
+export function noticePalette(settings,coverAccent='',light=false) {
+  const background=settings.noticeBackgroundStyle==='cover' && /^#[\da-f]{6}$/i.test(coverAccent)?coverAccent:settings.noticeBackgroundColor;
+  const opacity=100-settings.noticeTransparency;
+  const base=blendColor(background,light?'#E8EDEF':'#202831',opacity);
+  const white='#F1F7F6',dark='#202D35';
+  const foreground=contrastRatio(white,base)>=contrastRatio(dark,base)?white:dark;
+  const automatic=settings.noticeTextSource==='auto';
+  return {background,opacity,backgroundCss:background+Math.round(opacity*255/100).toString(16).padStart(2,'0'),
+    title:automatic?readableCoverColor(foreground,[base],4.5):settings.noticeTitleColor,
+    artist:automatic?readableCoverColor(foreground===white?'#BFC5CA':'#4B5561',[base],4.5):settings.noticeArtistColor};
 }
 export function contrastRatio(first,second) {
   const luminance=color=>{
@@ -205,6 +235,7 @@ export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='') 
   return {
     playedPalette:playedPalette(settings,coverAccent),
     controlsPalette:controlsPalette(settings,coverAccent),
+    noticePalette:noticePalette(settings,coverAccent),
     settings, text, secondary, playing: Boolean(p.isPlaying), advancing:Boolean(advancing), hasTrack: Boolean(p.trackId || p.title),
     trackId:String(p.trackId || ''), title:String(p.title || ''), artist:String(p.artist || ''), isFavorite:Boolean(p.isFavorite), coverUrl:String(p.coverUrl || ''), coverTimeMs,
     durationMs:Number.isFinite(durationMs) && durationMs>0?durationMs:0,

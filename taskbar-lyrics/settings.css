@@ -35,12 +35,32 @@
 .tl-preview-timeline input::-webkit-slider-thumb{appearance:none;width:0;height:0;background:var(--tl-progress-color)}
 @property --tl-progress-color{syntax:"<color>";inherits:true;initial-value:#85DCD0}
 .tl-preview-animated .tl-preview-timeline input{transition:--tl-progress-color var(--tl-transition-duration)}
-.tl-preview-animated .tl-preview-played,.tl-preview-animated .tl-preview-controls{transition:color var(--tl-transition-duration),background-color var(--tl-transition-duration),opacity .13s}
+.tl-preview-animated .tl-preview-controls{transition:color var(--tl-transition-duration),background-color var(--tl-transition-duration),opacity .13s}
 .tl-preview-lyrics{transition:opacity .13s}
 .tl-preview-line{position:relative;width:max-content;max-width:100%;font-weight:500;line-height:1.45;white-space:nowrap}
 .tl-preview-secondary{font-weight:400}
-.tl-preview-played{position:absolute;inset:0;pointer-events:none}
+/* 同一份文字只绘制一次，以背景裁切显示双色进度。 */
+.tl-preview-glyph{display:block;color:var(--tl-lyric-waiting)}
+.tl-preview-glyph.tl-preview-progress{color:transparent;background:linear-gradient(to right,var(--tl-lyric-played) var(--tl-lyric-position),var(--tl-lyric-waiting) var(--tl-lyric-position));background-clip:text;-webkit-background-clip:text}
+@property --tl-lyric-played{syntax:"<color>";inherits:false;initial-value:#85DCD0}
+.tl-preview-animated .tl-preview-glyph{transition:--tl-lyric-played var(--tl-transition-duration)}
 .tl-preview-scrub{display:grid;grid-template-columns:54px minmax(0,1fr) 30px;align-items:center;gap:10px;margin-top:8px;font-size:10px;opacity:.75}
+.tl-notice-preview-row{display:flex;align-items:center;gap:10px;margin-top:8px}
+.tl-notice-preview-caption{flex:0 0 90px;font-size:10px;line-height:1.6;opacity:.6}
+.tl-notice-preview-scene{display:flex;justify-content:center;flex:1;min-width:0;padding:8px;border-radius:8px;overflow:hidden;background:radial-gradient(ellipse at 20% 40%,#5b8c8270,transparent 55%),radial-gradient(ellipse at 85% 40%,#9b769868,transparent 50%),#202831}
+.tl-notice-preview{max-width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #ffffff26;box-shadow:0 4px 12px #0002}
+.tl-notice-glass{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.tl-notice-line{overflow:hidden;white-space:nowrap;line-height:1.35;font-weight:500}
+.tl-notice-line span{display:block;width:max-content;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.tl-notice-center .tl-notice-line{text-align:center}
+.tl-notice-center .tl-notice-line span{margin-inline:auto}
+.tl-notice-artist{margin-top:3px;font-weight:400}
+.tl-notice-scroll .tl-notice-line span{max-width:none;overflow:visible;text-overflow:clip}
+.tl-notice-scroll:hover .tl-notice-line span{animation:tl-info-scroll var(--tl-info-duration,1.6s) linear infinite}
+.tl-notice-settings{display:grid;gap:14px}
+.tl-notice-settings .tl-color-row{margin-top:0}
+.tl-subheading{font-size:11px;font-weight:600;opacity:.7;padding-top:10px;border-top:1px solid var(--tl-border)}
+.tl-subheading:first-child{padding-top:0;border-top:0}
 /* 按钮使用固定尺寸，歌词长度只影响居中位置。 */
 .tl-preview-controls{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;width:144px;height:34px;padding:2px 4px;box-sizing:border-box;border-radius:20px;background:#ffffff0e;color:#eef9f7;opacity:0;transition:opacity .13s;pointer-events:none}
 .tl-preview-button{display:grid;place-items:center;justify-self:center;width:30px;height:30px;padding:7px;border:0;border-radius:15px;background:transparent;color:inherit;cursor:pointer}

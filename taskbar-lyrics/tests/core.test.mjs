@@ -1,10 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, normalize, makeFrame, nativeFontFamily, coverAccentFromPixels, playedPalette, controlsPalette, contrastRatio, readableCoverColor, previewPalettes, formatPlaybackTime } from '../src/core.mjs';
+import { DEFAULTS, normalize, makeFrame, nativeFontFamily, coverAccentFromPixels, playedPalette, controlsPalette, noticePalette, contrastRatio, readableCoverColor, previewPalettes, formatPlaybackTime, blendColor } from '../src/core.mjs';
 const snapshot = {
   playback:{trackId:'1',title:'歌曲',artist:'歌手',currentTime:1,updatedAt:1000,isPlaying:true,playbackRate:1,duration:10},
   lyric:{trackId:'1',timeOffset:0,lines:[{time:0,text:'第一句',translated:'one'},{time:2,text:'第二句',translated:'two'},{time:5,text:'第三句'}]}
 };
+test('浮层旧配置补齐默认值，非法样式、颜色和数值恢复有效范围',()=>{
+  assert.equal(normalize({}).noticeEnabled,DEFAULTS.noticeEnabled);assert.equal(normalize({}).noticeDuration,DEFAULTS.noticeDuration);
+  const s=normalize({noticeEnabled:false,noticeHoldOnHover:false,noticeShowArtist:false,noticeScrollText:false,noticeDuration:Infinity,noticeFadeDuration:-10,noticeWidth:900,noticeRadius:-4,noticeGap:90,noticeTransparency:130,noticeBackgroundStyle:'invalid',noticeTextSource:'invalid',noticeBackgroundColor:'invalid'});
+  assert.equal(s.noticeEnabled,false);assert.equal(s.noticeDuration,DEFAULTS.noticeDuration);assert.equal(s.noticeFadeDuration,0);assert.equal(s.noticeWidth,480);assert.equal(s.noticeRadius,0);assert.equal(s.noticeGap,40);assert.equal(s.noticeTransparency,100);
+  assert.equal(s.noticeBackgroundStyle,'glass');assert.equal(s.noticeTextSource,'auto');assert.equal(s.noticeBackgroundColor,DEFAULTS.noticeBackgroundColor);
+});
+test('浮层背景与文字独立，封面配色等待期间可沿用前一颜色',()=>{
+  const s=normalize({noticeBackgroundStyle:'cover',noticeBackgroundColor:'#223344',noticeTransparency:35,noticeTextSource:'custom',noticeTitleColor:'#FFFFAA',noticeArtistColor:'#CCEEFF'});
+  const p=noticePalette(s,'#E65F52');assert.equal(p.background,'#E65F52');assert.equal(p.opacity,65);assert.equal(p.title,'#FFFFAA');assert.equal(p.artist,'#CCEEFF');
+  assert.equal(noticePalette(s,'').background,'#223344');
+  assert.equal(makeFrame(snapshot,s,1000,'#E65F52').noticePalette.background,'#E65F52');
+  s.noticeTransparency=100;assert.equal(noticePalette(s,'#E65F52').title,'#FFFFAA');assert.equal(noticePalette(s,'#E65F52').backgroundCss,'#E65F5200');
+});
+test('浮层自动文字在明暗背景与预览中维持可读对比度',()=>{
+  for(const light of [true,false])for(const color of ['#F5D144','#152530','#E65F52']){
+    const s=normalize({noticeBackgroundStyle:'custom',noticeBackgroundColor:color,noticeTransparency:20});
+    const palette=noticePalette(s,'',light),base=blendColor(color,light?'#E8EDEF':'#202831',80);
+    assert.ok(contrastRatio(palette.title,base)>=4.5);assert.ok(contrastRatio(palette.artist,base)>=4.5);
+  }
+});
 test('单行与双行、翻译来自同一时钟', () => {
   assert.equal(makeFrame(snapshot,DEFAULTS,2100).text,'第二句');
   assert.equal(makeFrame(snapshot,DEFAULTS,2100).title,'歌曲');
