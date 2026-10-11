@@ -136,6 +136,9 @@ sealed class TaskbarLyrics
     bool masking, allowDisplay;
     Brush controlsColor;
     double primaryTextWidth, secondaryTextWidth;
+    double requestedPrimarySize=16,requestedSecondarySize=12,lyricAreaHeight=48;
+    bool dualLyrics;
+    object primaryCharacters=new object[0],secondaryCharacters=new object[0];
     IntPtr foregroundHook, reorderHook;
     readonly WinEvent shellEvent;
     int shellRaises;
@@ -582,7 +585,10 @@ sealed class TaskbarLyrics
         // 隐藏按钮仍保留测量尺寸，时间和进度条不会跳位。
         controlsViewport.Visibility=hovering && !coverHovered && (hoverEnabled || progressEnabled)?(hoverEnabled && !progressHovered?Visibility.Visible:Visibility.Hidden):Visibility.Collapsed;
         progressTimeViewport.Visibility=progressHovered?Visibility.Visible:Visibility.Collapsed;
-        lyricsText.Visibility=coverHovered || (hovering && (hoverEnabled || progressHovered))?Visibility.Hidden:Visibility.Visible;
+        bool showLyrics=!(coverHovered || (hovering && (hoverEnabled || progressHovered)));
+        // 先恢复字号与测量，再显示歌词，避免等下一次快照时闪动。
+        SizeLyrics(showLyrics);
+        lyricsText.Visibility=showLyrics?Visibility.Visible:Visibility.Hidden;
         progressBed.Height=progressFill.Height=progressHovered?6:3;
         progressThumb.Visibility=progressHovered?Visibility.Visible:Visibility.Collapsed;
     }
@@ -879,7 +885,7 @@ sealed class TaskbarLyrics
         if(!progressEnabled)CancelScrub();
         SetHover(hovering && (hoverEnabled || progressEnabled || coverEnabled));
         primary.FontFamily=secondary.FontFamily=new FontFamily(Convert.ToString(frame["fontFamily"]));
-        Style(s,area.Height/scale-(hovering && progressEnabled && !coverHovered?14:0),frame);
+        Style(s,area.Height/scale,frame);
         ButtonBackground("ButtonHoverBackground",s,"buttonHoverBackground","buttonHoverColor");
         ButtonBackground("ButtonPressedBackground",s,"buttonPressedBackground","buttonPressedColor");
         primary.Text=Convert.ToString(frame["text"]);
@@ -947,12 +953,12 @@ sealed class TaskbarLyrics
 
     void Style(Dictionary<string,object> s,double height,Dictionary<string,object> frame)
     {
-        bool dual=Convert.ToString(s["layout"]) == "double";
-        double first=Convert.ToDouble(s["primaryFontSize"]),second=Convert.ToDouble(s["secondaryFontSize"]);
-        double lineSpacing=primary.FontFamily.LineSpacing;
-        double fit=Math.Min(1,Math.Max(1,height-4)/(lineSpacing*(first+(dual?second:0))+(dual?1:0)));
-        primary.FontSize=first*fit;secondary.FontSize=second*fit;
-        secondary.Visibility=dual ? Visibility.Visible : Visibility.Collapsed;
+        dualLyrics=Convert.ToString(s["layout"]) == "double";
+        requestedPrimarySize=Convert.ToDouble(s["primaryFontSize"]);requestedSecondarySize=Convert.ToDouble(s["secondaryFontSize"]);lyricAreaHeight=height;
+        primaryCharacters=frame.ContainsKey("characters")?frame["characters"]:new object[0];
+        secondaryCharacters=frame.ContainsKey("secondaryCharacters")?frame["secondaryCharacters"]:new object[0];
+        SizeLyrics(lyricsText.Visibility==Visibility.Visible);
+        secondary.Visibility=dualLyrics ? Visibility.Visible : Visibility.Collapsed;
         secondaryViewport.Visibility=secondary.Visibility;
         window.Opacity=Convert.ToDouble(s["opacity"])/100;
         // 抵消整体透明度，避免点击底层被舍入成完全透明的像素。
@@ -1068,6 +1074,20 @@ sealed class TaskbarLyrics
         double natural=text.DesiredSize.Width;
         text.Width=scroll ? natural : viewportWidth;
         return natural;
+    }
+
+    void SizeLyrics(bool visible)
+    {
+        // 仅实际显示的歌词给进度条让位，隐藏时保持正常字号。
+        double height=lyricAreaHeight-(visible && progressHost.Visibility==Visibility.Visible?14:0);
+        double fit=Math.Min(1,Math.Max(1,height-4)/(primary.FontFamily.LineSpacing*(requestedPrimarySize+(dualLyrics?requestedSecondarySize:0))+(dualLyrics?1:0)));
+        double first=requestedPrimarySize*fit,second=requestedSecondarySize*fit;
+        if(primary.FontSize==first && secondary.FontSize==second)return;
+        primary.FontSize=first;secondary.FontSize=second;
+        primaryTextWidth=FitLine(primary,primaryViewport.Width,scrolling);
+        secondaryTextWidth=FitLine(secondary,secondaryViewport.Width,scrollingTranslation);
+        UpdateStops(primary,primaryCharacters,ref primaryProfileKey,ref primaryStops);
+        UpdateStops(secondary,secondaryCharacters,ref secondaryProfileKey,ref secondaryStops);
     }
 
     void RenderScroll(object sender,EventArgs e)
