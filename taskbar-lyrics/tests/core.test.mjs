@@ -1,10 +1,66 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, normalize, makeFrame, nativeFontFamily, coverAccentFromPixels, playedPalette, controlsPalette, noticePalette, contrastRatio, readableCoverColor, previewPalettes, formatPlaybackTime, blendColor } from '../src/core.mjs';
+import { DEFAULTS, normalize, makeFrame, nativeFontFamily, coverAccentFromPixels, coverPaletteFromPixels, coverInformationColor, playedPalette, controlsPalette, noticePalette, contrastRatio, readableCoverColor, previewPalettes, formatPlaybackTime, blendColor } from '../src/core.mjs';
 const snapshot = {
   playback:{trackId:'1',title:'歌曲',artist:'歌手',currentTime:1,updatedAt:1000,isPlaying:true,playbackRate:1,duration:10},
   lyric:{trackId:'1',timeOffset:0,lines:[{time:0,text:'第一句',translated:'one'},{time:2,text:'第二句',translated:'two'},{time:5,text:'第三句'}]}
 };
+test('歌曲信息选取不同色相的稳定封面色块，避开控件配色与噪点',()=>{
+  const pixels=[];
+  for(const [color,count] of [[[220,30,20],700],[[20,210,50],250],[[20,50,210],73],[[230,40,30],1]])for(let i=0;i<count;i++)pixels.push(...color,255);
+  const colors=coverPaletteFromPixels(pixels),main=coverAccentFromPixels(pixels);
+  assert.equal(colors[0],main);assert.equal(main,'#DC1E14');assert.equal(colors.length,3);
+  assert.equal(coverInformationColor(colors,[main]),'#14D232');
+  assert.equal(coverInformationColor(colors,[main,'#14D232']),'#1432D2');
+  assert.equal(coverInformationColor(['#DC1E14','#E03220'],[main]),'');
+  assert.deepEqual(coverPaletteFromPixels([10,20,30,0]),[]);
+});
+test('歌曲信息封面配色独立于控件，支持回退、对比度和传入帧',()=>{
+  const s=normalize({noticeTextSource:'cover',smartContrast:false});assert.equal(s.noticeTextSource,'cover');
+  const frame=makeFrame(snapshot,s,1000,'#DC1E14','#14D232');
+  assert.equal(frame.controlsPalette.foreground,'#DC1E14');assert.equal(frame.noticePalette.title,'#14D232');assert.equal(frame.noticePalette.artist,'#14D232');
+  assert.equal(noticePalette(s,'#DC1E14',false,'').title,s.noticeTitleColor);
+  for(const light of [false,true]){
+    const settings={...s,smartContrast:true,noticeTransparency:100};
+    const color=noticePalette(settings,'#DC1E14',light,'#1432D2').title;
+    assert.ok(contrastRatio(color,light?'#E8EDEF':'#202831')>=4.5);
+  }
+});
+test('歌曲信息主色取色与智能配色分别保存，旧配置保留智能模式',()=>{
+  const primary=normalize({noticeTextSource:'cover-primary',smartContrast:false});
+  assert.equal(primary.noticeTextSource,'cover-primary');assert.deepEqual(normalize(primary),primary);
+  const frame=makeFrame(snapshot,primary,1000,'#DC1E14','#14D232');
+  assert.equal(frame.noticePalette.title,'#DC1E14');assert.equal(frame.noticePalette.artist,'#DC1E14');
+  assert.equal(noticePalette(primary,'',false,'#14D232').title,primary.noticeTitleColor);
+  const smart=normalize({...primary,noticeTextSource:'cover'});
+  assert.equal(smart.noticeTextSource,'cover');assert.equal(noticePalette(smart,'#DC1E14',false,'#14D232').title,'#14D232');
+  for(const source of ['cover','cover-primary'])for(const light of [false,true]){
+    const palette=noticePalette({...primary,noticeTextSource:source,smartContrast:true,noticeTransparency:100},'#1432D2',light,'#1432D2');
+    assert.ok(contrastRatio(palette.title,light?'#E8EDEF':'#202831')>=4.5);
+  }
+});
+test('智能配色优先选择与控件协调的封面色块',()=>{
+  assert.equal(coverInformationColor(['#80FF00','#00FFFF'],['#FF0000']),'#00FFFF');
+  assert.equal(coverInformationColor(['#80FF00','#00FFFF'],['#FF0000','#00FFFF']),'#80FF00');
+});
+test('三项悬停组件独立保存，旧配置默认开启歌曲信息',()=>{
+  assert.equal(normalize({}).hoverSongInfo,true);
+  for(const buttons of [false,true])for(const progress of [false,true])for(const info of [false,true]){
+    const s=normalize({hoverControls:buttons,hoverProgress:progress,hoverSongInfo:info});
+    assert.equal(s.hoverControls,buttons);assert.equal(s.hoverProgress,progress);assert.equal(s.hoverSongInfo,info);
+  }
+});
+test('歌曲信息统一字号，旧歌手字号迁移并沿用歌名字号',()=>{
+  for(const size of [10,18,24]){
+    const s=normalize({noticeTitleFontSize:size,noticeArtistFontSize:8});
+    assert.equal(s.noticeTitleFontSize,size);assert.equal(s.noticeArtistFontSize,size);
+    assert.deepEqual(normalize(s),s);
+  }
+  const invalid=normalize({noticeTitleFontSize:Infinity,noticeArtistFontSize:20});
+  assert.equal(invalid.noticeTitleFontSize,DEFAULTS.noticeTitleFontSize);
+  assert.equal(invalid.noticeArtistFontSize,invalid.noticeTitleFontSize);
+  assert.equal(normalize({noticeTitleFontSize:99}).noticeArtistFontSize,24);
+});
 test('双行换句动画独立保存，旧设置补齐并限制时长',()=>{
   assert.equal(normalize({}).lyricTransitions,true);
   assert.equal(normalize({}).lyricTransitionDuration,180);
@@ -14,11 +70,11 @@ test('双行换句动画独立保存，旧设置补齐并限制时长',()=>{
   for(const style of ['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil'])assert.equal(normalize({lyricTransitionStyle:style}).lyricTransitionStyle,style);
   assert.equal(normalize({lyricTransitionStyle:'invalid'}).lyricTransitionStyle,'up');
 });
-test('浮层旧配置补齐默认值，非法样式、颜色和数值恢复有效范围',()=>{
-  assert.equal(normalize({}).noticeEnabled,DEFAULTS.noticeEnabled);assert.equal(normalize({}).noticeDuration,DEFAULTS.noticeDuration);
+test('清理旧自动展示和信息宽度设置，保留歌曲信息文字样式',()=>{
   const s=normalize({noticeEnabled:false,noticeHoldOnHover:false,noticeShowArtist:false,noticeScrollText:false,noticeDuration:Infinity,noticeFadeDuration:-10,noticeWidth:900,noticeRadius:-4,noticeGap:90,noticeTransparency:130,noticeBackgroundStyle:'invalid',noticeTextSource:'invalid',noticeBackgroundColor:'invalid'});
-  assert.equal(s.noticeEnabled,false);assert.equal(s.noticeDuration,DEFAULTS.noticeDuration);assert.equal(s.noticeFadeDuration,0);assert.equal(s.noticeWidth,480);assert.equal(s.noticeRadius,0);assert.equal(s.noticeGap,40);assert.equal(s.noticeTransparency,100);
-  assert.equal(s.noticeBackgroundStyle,'glass');assert.equal(s.noticeTextSource,'auto');assert.equal(s.noticeBackgroundColor,DEFAULTS.noticeBackgroundColor);
+  for(const key of ['noticeEnabled','noticeOnlyTaskbarSwitch','noticeDuration','noticeFadeDuration','noticeHoldOnHover','noticeWidth'])assert.equal(key in s,false);
+  assert.equal(s.noticeShowArtist,false);assert.equal(s.noticeScrollText,false);assert.equal(s.noticeRadius,0);assert.equal(s.noticeGap,40);assert.equal(s.noticeTransparency,100);
+  assert.equal(s.noticeBackgroundStyle,'glass');assert.equal(s.noticeTextSource,DEFAULTS.noticeTextSource);assert.equal(s.noticeBackgroundColor,DEFAULTS.noticeBackgroundColor);
 });
 test('浮层背景与文字独立，封面配色等待期间可沿用前一颜色',()=>{
   const s=normalize({noticeBackgroundStyle:'cover',noticeBackgroundColor:'#223344',noticeTransparency:35,noticeTextSource:'custom',noticeTitleColor:'#FFFFAA',noticeArtistColor:'#CCEEFF'});
@@ -29,7 +85,7 @@ test('浮层背景与文字独立，封面配色等待期间可沿用前一颜�
 });
 test('浮层自动文字在明暗背景与预览中维持可读对比度',()=>{
   for(const light of [true,false])for(const color of ['#F5D144','#152530','#E65F52']){
-    const s=normalize({noticeBackgroundStyle:'custom',noticeBackgroundColor:color,noticeTransparency:20});
+    const s=normalize({noticeTextSource:'auto',noticeBackgroundStyle:'custom',noticeBackgroundColor:color,noticeTransparency:20});
     const palette=noticePalette(s,'',light),base=blendColor(color,light?'#E8EDEF':'#202831',80);
     assert.ok(contrastRatio(palette.title,base)>=4.5);assert.ok(contrastRatio(palette.artist,base)>=4.5);
   }

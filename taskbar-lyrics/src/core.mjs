@@ -38,34 +38,31 @@ export const DEFAULTS = Object.freeze({
   "coverShape": "rectangle",
   "rotateCover": false,
   "hoverProgress": true,
+  "hoverSongInfo": true,
   "smartContrast": true,
   "trackTransitions": true,
   "transitionDuration": 280,
   "lyricTransitions": true,
   "lyricTransitionDuration": 180,
   "lyricTransitionStyle": "up",
-  "noticeEnabled": true,
-  "noticeOnlyTaskbarSwitch": true,
-  "noticeDuration": 2,
-  "noticeFadeDuration": 180,
-  "noticeHoldOnHover": true,
   "noticeBackgroundStyle": "glass",
   "noticeBackgroundColor": "#ffffff",
   "noticeTransparency": 100,
-  "noticeWidth": 180,
   "noticeRadius": 15,
   "noticeGap": 8,
   "noticeShowArtist": true,
-  "noticeTitleFontSize": 15,
-  "noticeArtistFontSize": 12,
-  "noticeTextSource": "auto",
+  "noticeTitleFontSize": 19,
+  "noticeArtistFontSize": 19,
+  "noticeTextSource": "cover-primary",
   "noticeTextAlignment": "center",
-  "noticeTitleColor": "#F1F7F6",
-  "noticeArtistColor": "#BFC5CA",
+  "noticeTitleColor": "#ffffff",
+  "noticeArtistColor": "#ffffff",
   "noticeScrollText": true
 });
 export function normalize(value = {}) {
   const s = { ...DEFAULTS, ...value };
+  // 清理已移除的自动展示和信息宽度配置，旧设置不会恢复此行为。
+  for (const key of ["noticeEnabled","noticeOnlyTaskbarSwitch","noticeDuration","noticeFadeDuration","noticeHoldOnHover","noticeWidth"]) delete s[key];
   // 旧版字号迁移到独立行设置，保留用户原来的视觉比例。
   s.primaryFontSize = value.primaryFontSize ?? value.fontSize ?? DEFAULTS.primaryFontSize;
   s.secondaryFontSize = value.secondaryFontSize ?? (value.fontSize ? Math.round(value.fontSize * .8) : DEFAULTS.secondaryFontSize);
@@ -73,13 +70,15 @@ export function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeDuration',1,30],['noticeFadeDuration',0,1000],['noticeTransparency',0,100],['noticeWidth',180,480],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24],['noticeArtistFontSize',8,20]]) {
+  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
-  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
+  // 兼容旧歌手字号字段，整段歌曲信息统一沿用歌名字号。
+  s.noticeArtistFontSize = s.noticeTitleFontSize;
+  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom','cover','cover-primary']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
     if (!values.includes(s[key])) s[key] = DEFAULTS[key];
   }
-  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','smartContrast','trackTransitions','lyricTransitions','noticeEnabled','noticeOnlyTaskbarSwitch','noticeHoldOnHover','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);
+  for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','hoverSongInfo','smartContrast','trackTransitions','lyricTransitions','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);
   for (const key of ['primaryColor','secondaryColor','primaryPlayedColor','secondaryPlayedColor','controlsBackgroundColor','controlsIconColor','buttonHoverColor','buttonPressedColor','noticeBackgroundColor','noticeTitleColor','noticeArtistColor']) {
     if (!/^#[\da-f]{6}$/i.test(s[key])) s[key]=DEFAULTS[key];
   }
@@ -97,7 +96,8 @@ export function nativeFontFamily(font) {
   const generic = new Set(['system-ui','sans-serif','-apple-system','BlinkMacSystemFont']);
   return String(font || '').split(',').map(name => name.trim().replace(/^['"]|['"]$/g,'')).filter(name => name && !generic.has(name)).concat(['Microsoft YaHei UI','Segoe UI']).join(', ');
 }
-export function coverAccentFromPixels(pixels) {
+export function coverAccentFromPixels(pixels) { return coverPaletteFromPixels(pixels)[0] || ''; }
+export function coverPaletteFromPixels(pixels) {
   // 鲜艳色块优先，忽略透明像素和零星噪点，避免灰色背景占据取色结果。
   const bins=new Map();let total=0;
   for(let i=0;i+3<pixels.length;i+=4){
@@ -107,7 +107,7 @@ export function coverAccentFromPixels(pixels) {
     const bin=bins.get(key)||[0,0,0,0];
     bin[0]+=r;bin[1]+=g;bin[2]+=b;bin[3]++;bins.set(key,bin);
   }
-  if(!total)return '';
+  if(!total)return [];
   const minimum=total<32?1:Math.max(2,Math.ceil(total*.004));
   const supported=[...bins.values()].filter(bin=>bin[3]>=minimum);
   const candidates=(supported.length?supported:[...bins.values()]).map(bin=>{
@@ -117,18 +117,43 @@ export function coverAccentFromPixels(pixels) {
   // 有鲜艳区域时只在其中选择，面积作为次要权重，保留封面原有色相与饱和度。
   const vivid=candidates.filter(color=>color.saturation>=.5 && color.value>=.4);
   const chromatic=candidates.filter(color=>color.saturation>=.15 && color.value>=.2);
-  const pool=vivid.length?vivid:chromatic.length?chromatic:candidates;
-  if(!pool.length)return '';
-  let selected=pool[0],score=-1;
-  for(const color of pool){
-    const weight=chromatic.length?Math.pow(color.saturation,2)*(.4+.6*color.value)*Math.pow(color.count/total,.25):color.count;
-    if(weight>score){selected=color;score=weight;}
-  }
-  const multiplier=selected.value>0 && selected.value<.55?.55/selected.value:1;
-  const rgb=selected.rgb.map(c=>Math.min(255,c*multiplier));
-  // 黑白封面回退中性灰，不凭空生成彩色；彩色不再混白导致褪色。
-  if(!chromatic.length){const gray=Math.min(200,Math.max(140,rgb[0]*.299+rgb[1]*.587+rgb[2]*.114));rgb.fill(gray);}
-  return '#'+rgb.map(c=>Math.round(c).toString(16).padStart(2,'0')).join('').toUpperCase();
+  // 保留稳定的次要色块，歌曲信息可选择与控件不同的封面颜色。
+  const rank=color=>vivid.includes(color)?2:chromatic.includes(color)?1:0;
+  const weight=color=>chromatic.length?Math.pow(color.saturation,2)*(.4+.6*color.value)*Math.pow(color.count/total,.25):color.count;
+  candidates.sort((a,b)=>rank(b)-rank(a) || weight(b)-weight(a));
+  return [...new Set(candidates.map(selected=>{
+    const multiplier=selected.value>0 && selected.value<.55?.55/selected.value:1;
+    const rgb=selected.rgb.map(c=>Math.min(255,c*multiplier));
+    // 黑白封面保留中性灰，不凭空生成彩色。
+    if(!chromatic.length){const gray=Math.min(200,Math.max(140,rgb[0]*.299+rgb[1]*.587+rgb[2]*.114));rgb.fill(gray);}
+    return '#'+rgb.map(c=>Math.round(c).toString(16).padStart(2,'0')).join('').toUpperCase();
+  }))];
+}
+export function coverInformationColor(swatches,excluded=[]) {
+  const rgb=color=>[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));
+  const tone=channels=>{
+    const [r,g,b]=channels,max=Math.max(...channels),min=Math.min(...channels),delta=max-min;
+    const hue=delta?60*(max===r?((g-b)/delta+6)%6:max===g?(b-r)/delta+2:(r-g)/delta+4):0;
+    return {hue,saturation:max?delta/max:0};
+  };
+  const used=excluded.filter(color=>/^#[\da-f]{6}$/i.test(color)).map(rgb);
+  const candidates=swatches.filter(color=>{
+    if(!/^#[\da-f]{6}$/i.test(color))return false;
+    const channels=rgb(color),candidate=tone(channels);
+    return used.every(other=>{
+      if(Math.hypot(...channels.map((value,i)=>value-other[i]))<72)return false;
+      const current=tone(other),angle=Math.abs(candidate.hue-current.hue);
+      return candidate.saturation<.15 || current.saturation<.15 || Math.min(angle,360-angle)>=35;
+    });
+  });
+  // 从封面候选中优先选择邻近、三角色或互补搭配，保持与控件的区分。
+  const chromatic=used.map(tone).filter(color=>color.saturation>=.15);
+  const harmony=color=>chromatic.reduce((score,current)=>{
+    const candidate=tone(rgb(color));if(candidate.saturation<.15)return score;
+    const angle=Math.abs(candidate.hue-current.hue),distance=Math.min(angle,360-angle);
+    return score+Math.min(...[60,120,180].map(target=>Math.abs(distance-target)));
+  },0);
+  return candidates.map((color,index)=>({color,score:harmony(color)+index*.5})).sort((a,b)=>a.score-b.score)[0]?.color || '';
 }
 export function playedPalette(settings,coverAccent='') {
   const automatic=settings.playedColorSource==='cover';
@@ -142,16 +167,20 @@ export function controlsPalette(settings,coverAccent='') {
   const opacity=settings.controlsBackgroundOpacity;
   return {background,foreground,opacity,backgroundCss:background+Math.round(opacity*255/100).toString(16).padStart(2,'0')};
 }
-export function noticePalette(settings,coverAccent='',light=false) {
+export function noticePalette(settings,coverAccent='',light=false,informationAccent='') {
   const background=settings.noticeBackgroundStyle==='cover' && /^#[\da-f]{6}$/i.test(coverAccent)?coverAccent:settings.noticeBackgroundColor;
   const opacity=100-settings.noticeTransparency;
   const base=blendColor(background,light?'#E8EDEF':'#202831',opacity);
   const white='#F1F7F6',dark='#202D35';
   const foreground=contrastRatio(white,base)>=contrastRatio(dark,base)?white:dark;
   const automatic=settings.noticeTextSource==='auto';
+  // cover 保留旧智能配色的配置值，新增主色模式不改变用户原有选择。
+  const accent=settings.noticeTextSource==='cover-primary'?coverAccent:settings.noticeTextSource==='cover'?informationAccent:'';
+  const cover=/^#[\da-f]{6}$/i.test(accent)?accent:'';
+  const information=cover && settings.smartContrast?readableCoverColor(cover,[base],4.5):cover;
   return {background,opacity,backgroundCss:background+Math.round(opacity*255/100).toString(16).padStart(2,'0'),
-    title:automatic?readableCoverColor(foreground,[base],4.5):settings.noticeTitleColor,
-    artist:automatic?readableCoverColor(foreground===white?'#BFC5CA':'#4B5561',[base],4.5):settings.noticeArtistColor};
+    title:automatic?readableCoverColor(foreground,[base],4.5):information||settings.noticeTitleColor,
+    artist:automatic?readableCoverColor(foreground===white?'#BFC5CA':'#4B5561',[base],4.5):information||settings.noticeArtistColor};
 }
 export function contrastRatio(first,second) {
   const luminance=color=>{
@@ -195,7 +224,7 @@ export function formatPlaybackTime(milliseconds) {
   const value=Number(milliseconds),total=Math.floor(Math.max(0,Number.isFinite(value)?value:0)/1000),seconds=String(total%60).padStart(2,'0');
   return total>=3600?`${Math.floor(total/3600)}:${String(Math.floor(total/60)%60).padStart(2,'0')}:${seconds}`:`${String(Math.floor(total/60)).padStart(2,'0')}:${seconds}`;
 }
-export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='') {
+export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='',informationAccent='') {
   const p = snapshot.playback ?? {};
   const lyric = snapshot.lyric ?? {};
   const lines = lyric.lines ?? [];
@@ -238,7 +267,7 @@ export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='') 
   return {
     playedPalette:playedPalette(settings,coverAccent),
     controlsPalette:controlsPalette(settings,coverAccent),
-    noticePalette:noticePalette(settings,coverAccent),
+    noticePalette:noticePalette(settings,coverAccent,false,informationAccent),
     settings, text, secondary, playing: Boolean(p.isPlaying), advancing:Boolean(advancing), hasTrack: Boolean(p.trackId || p.title),
     trackId:String(p.trackId || ''), title:String(p.title || ''), artist:String(p.artist || ''), isFavorite:Boolean(p.isFavorite), coverUrl:String(p.coverUrl || ''), coverTimeMs,
     durationMs:Number.isFinite(durationMs) && durationMs>0?durationMs:0,
