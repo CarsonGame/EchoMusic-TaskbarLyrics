@@ -1,4 +1,4 @@
-import { DEFAULTS, normalize, makeFrame, coverPaletteFromPixels, coverInformationColor, controlsPalette, previewPalettes, noticePalette, formatPlaybackTime } from './core.mjs';
+import { DEFAULTS, normalize, makeFrame, playbackLoading, coverPaletteFromPixels, coverInformationColor, controlsPalette, previewPalettes, noticePalette, formatPlaybackTime } from './core.mjs';
 // @compiled-panel
 export async function activate(ctx) {
   if (ctx.electron.platform !== 'win32') throw new Error('此插件仅支持 Windows。');
@@ -27,6 +27,10 @@ export async function activate(ctx) {
   };
   const commandWaiters = new Set();
   const snapshotRef = ctx.vue.shallowRef(snapshot);
+  // 旧版播放快照未包含加载状态，优先读取宿主实时 computed。
+  const syncedPlayback=ctx.vue.computed(()=>({...snapshotRef.value.playback,
+    isLoading:ctx.vue.unref(ctx.player?.isLoading) ?? snapshotRef.value.playback?.isLoading,
+    playbackState:ctx.vue.unref(ctx.player?.playbackState) ?? snapshotRef.value.playback?.playbackState}));
   const displays = ctx.vue.ref([]);
   const token = crypto.randomUUID();
   const updateSnapshot = next => {
@@ -40,7 +44,7 @@ export async function activate(ctx) {
   const currentFrame = () => {
     const information=informationAccent(settings);
     if(information)coverInformationAccent.value=information;
-    const frame={...makeFrame(snapshot,settings,Date.now(),coverAccent.value,information),commandBusy};
+    const frame={...makeFrame({...snapshot,playback:syncedPlayback.value},settings,Date.now(),coverAccent.value,information),commandBusy};
     if (frame.coverUrl) {
       frame.coverSourceUrl=frame.coverUrl;
       frame.coverUrl=`${server.origin}/cover?token=${token}&key=${coverRevision}`;
@@ -90,12 +94,13 @@ export async function activate(ctx) {
     if (commandBusy) return { status:409,body:JSON.stringify({error:'歌曲操作正在处理中'}) };
     updateSnapshot(await ctx.nowPlaying.getSnapshot());
     if (commandBusy) return { status:409,body:JSON.stringify({error:'歌曲操作正在处理中'}) };
-    const before = snapshot.playback;
+    const before = syncedPlayback.value;
     if (!before?.trackId || String(before.trackId) !== request.query.trackId) return { status:409,body:JSON.stringify({error:'歌曲已切换，请重试'}) };
     const duration=makeFrame(snapshot,settings).durationMs/1000;
     const requested=Number(request.query.value);
     if(seeking && (request.query.value===undefined || String(request.query.value).trim()==='' || !Number.isFinite(requested)))return {status:400,body:JSON.stringify({error:'播放位置无效'})};
-    if(seeking && (!Number.isFinite(duration) || duration<=0 || before.isLoading))return {status:409,body:JSON.stringify({error:'当前歌曲暂时无法跳转'})};
+    if(seeking && (!Number.isFinite(duration) || duration<=0 || playbackLoading(before)))return {status:409,body:JSON.stringify({error:'当前歌曲暂时无法跳转'})};
+    if(action==='togglePlayback' && playbackLoading(before))return {status:409,body:JSON.stringify({error:'歌曲正在加载，请稍后重试'})};
     const target=seeking?Math.min(duration,Math.max(0,requested)):0;
     commandBusy = true;
     let finish, timer;
@@ -232,6 +237,7 @@ export async function activate(ctx) {
       const previewDuration=ctx.vue.computed(()=>formatPlaybackTime((Number(snapshotRef.value.playback?.duration)||260)*1000));
       const previewElapsed=ctx.vue.computed(()=>formatPlaybackTime((Number(snapshotRef.value.playback?.duration)||260)*10*previewProgress.value));
       const previewPlaying=ctx.vue.computed(() => Boolean(snapshotRef.value.playback?.isPlaying));
+      const previewLoading=ctx.vue.computed(()=>playbackLoading(syncedPlayback.value));
       const previewFavorite=ctx.vue.computed(() => Boolean(snapshotRef.value.playback?.isFavorite));
       const previewTitle=ctx.vue.computed(()=>snapshotRef.value.playback?.title || '让每一句，留在此刻');
       const previewArtist=ctx.vue.computed(()=>snapshotRef.value.playback?.artist ?? 'EchoMusic');
@@ -272,7 +278,7 @@ export async function activate(ctx) {
         if (settings.enabled && !pid) await start();
       });
       const reset = () => { Object.assign(draft, DEFAULTS); return save(); };
-      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewFavorite, coverFailed, setColor, restart: () => run(start) };
+      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
     }
   });
   ctx.ui.settings.define({ title:'任务栏歌词 · 微光', component:panel });

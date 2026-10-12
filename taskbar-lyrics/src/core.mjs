@@ -224,15 +224,21 @@ export function formatPlaybackTime(milliseconds) {
   const value=Number(milliseconds),total=Math.floor(Math.max(0,Number.isFinite(value)?value:0)/1000),seconds=String(total%60).padStart(2,'0');
   return total>=3600?`${Math.floor(total/3600)}:${String(Math.floor(total/60)%60).padStart(2,'0')}:${seconds}`:`${String(Math.floor(total/60)).padStart(2,'0')}:${seconds}`;
 }
+export function playbackLoading(playback = {}) {
+  // 明确的终态优先，避免错误或取消后残留加载标记。
+  if(['loading','playing','paused','error'].includes(playback.playbackState))return playback.playbackState==='loading';
+  return Boolean(playback.isLoading);
+}
 export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='',informationAccent='') {
   const p = snapshot.playback ?? {};
+  const loading=playbackLoading(p);
   const lyric = snapshot.lyric ?? {};
   const lines = lyric.lines ?? [];
   // 宿主时钟在恢复播放时重设采样时间，旧 updatedAt 可能仍停在暂停前。
   const clock = Number.isFinite(p.clock?.positionMs) && (!p.clock.trackId || String(p.clock.trackId) === String(p.trackId)) ? p.clock : undefined;
   const rate = Number(clock?.playbackRate ?? p.playbackRate ?? 1);
   const playbackRate = Number.isFinite(rate) && rate > 0 ? rate : 1;
-  const advancing = Boolean(p.isPlaying) && (clock?.isPlaying !== false) && (clock?.isAdvancing ?? p.isAdvancing ?? true);
+  const advancing = !loading && Boolean(p.isPlaying) && (clock?.isPlaying !== false) && (clock?.isAdvancing ?? p.isAdvancing ?? true);
   let ms = clock ? clock.positionMs : Number(p.currentTime || 0) * 1000;
   const sampledAt = Number(clock?.sampledAt ?? p.updatedAt ?? now);
   if (advancing) ms += Math.max(0, now - (Number.isFinite(sampledAt) && sampledAt > 0 ? sampledAt : now)) * playbackRate;
@@ -268,7 +274,7 @@ export function makeFrame(snapshot, settings, now = Date.now(), coverAccent='',i
     playedPalette:playedPalette(settings,coverAccent),
     controlsPalette:controlsPalette(settings,coverAccent),
     noticePalette:noticePalette(settings,coverAccent,false,informationAccent),
-    settings, text, secondary, playing: Boolean(p.isPlaying), advancing:Boolean(advancing), hasTrack: Boolean(p.trackId || p.title),
+    settings, text, secondary, playing: Boolean(p.isPlaying), loading, advancing:Boolean(advancing), hasTrack: Boolean(p.trackId || p.title),
     trackId:String(p.trackId || ''), title:String(p.title || ''), artist:String(p.artist || ''), isFavorite:Boolean(p.isFavorite), coverUrl:String(p.coverUrl || ''), coverTimeMs,
     durationMs:Number.isFinite(durationMs) && durationMs>0?durationMs:0,
     lyricKey: `${p.trackId || ''}:${index}`, timelineMs: ms,

@@ -92,7 +92,10 @@ sealed class TaskbarLyrics
     RectangleGeometry coverRectangle;
     EllipseGeometry coverCircle;
     Button previousButton,playButton,nextButton,favoriteButton;
-    System.Windows.Shapes.Path playGlyph,pauseGlyph,favoriteGlyph;
+    System.Windows.Shapes.Path playGlyph,pauseGlyph,favoriteGlyph,loadingGlyph;
+    RotateTransform loadingSpin;
+    bool frameLoading;
+    static readonly Stopwatch loadingAnimationClock=Stopwatch.StartNew();
     DispatcherTimer pointerTimer;
     bool hovering,hoverEnabled,coverEnabled,coverSpinning,closed,frameBusy,hasControlTrack,favorite;
     string controlTrackId="",coverKey="";
@@ -264,6 +267,7 @@ sealed class TaskbarLyrics
             controlsViewport=(Viewbox)window.FindName("ControlsViewport");controlsSurface=(Border)window.FindName("ControlsSurface");
             previousButton=(Button)window.FindName("PreviousButton");playButton=(Button)window.FindName("PlayButton");nextButton=(Button)window.FindName("NextButton");favoriteButton=(Button)window.FindName("FavoriteButton");
             playGlyph=(System.Windows.Shapes.Path)window.FindName("PlayGlyph");pauseGlyph=(System.Windows.Shapes.Path)window.FindName("PauseGlyph");favoriteGlyph=(System.Windows.Shapes.Path)window.FindName("FavoriteGlyph");
+            loadingGlyph=(System.Windows.Shapes.Path)window.FindName("LoadingGlyph");loadingSpin=(RotateTransform)window.FindName("LoadingSpin");
             previousButton.Click+=(sender,e)=>SendAction("previousTrack");playButton.Click+=(sender,e)=>SendAction("togglePlayback");nextButton.Click+=(sender,e)=>SendAction("nextTrack");favoriteButton.Click+=(sender,e)=>SendAction("toggleFavorite");
 
         handle=new WindowInteropHelper(window).EnsureHandle();
@@ -677,15 +681,18 @@ sealed class TaskbarLyrics
     {
         bool enabled=hasControlTrack && !frameBusy && !actionPending && scrubOwner==null;
         previousButton.IsEnabled=playButton.IsEnabled=nextButton.IsEnabled=favoriteButton.IsEnabled=enabled;
-        playGlyph.Visibility=clockPlaying?Visibility.Collapsed:Visibility.Visible;
-        pauseGlyph.Visibility=clockPlaying?Visibility.Visible:Visibility.Collapsed;
-        System.Windows.Automation.AutomationProperties.SetName(playButton,clockPlaying?"暂停":"播放");
+        playButton.IsEnabled=enabled && !frameLoading;
+        playGlyph.Visibility=!frameLoading && !clockPlaying?Visibility.Visible:Visibility.Collapsed;
+        pauseGlyph.Visibility=!frameLoading && clockPlaying?Visibility.Visible:Visibility.Collapsed;
+        loadingGlyph.Visibility=frameLoading?Visibility.Visible:Visibility.Collapsed;
+        System.Windows.Automation.AutomationProperties.SetName(playButton,frameLoading?"歌曲加载中":clockPlaying?"暂停":"播放");
         System.Windows.Automation.AutomationProperties.SetName(favoriteButton,favorite?"取消收藏":"收藏");
         favoriteButton.Foreground=controlsColor;
         favoriteGlyph.Fill=favorite?favoriteButton.Foreground:Brushes.Transparent;
     }
     async void SendAction(string action,double value=0)
     {
+        if(action=="togglePlayback" && frameLoading)return;
         if(actionPending || scrubOwner!=null || !hasControlTrack || !(action=="seek"?progressEnabled:hoverEnabled) || !allowDisplay)return;
         // 所有屏幕共享操作锁，等待播放器确认后统一更新图标。
         actionPending=true;foreach(var surface in instances)surface.RefreshControls();
@@ -934,6 +941,7 @@ sealed class TaskbarLyrics
         secondary.Text=Convert.ToString(frame["secondary"]);
         favorite=frame.ContainsKey("isFavorite") && Convert.ToBoolean(frame["isFavorite"]);
         frameBusy=frame.ContainsKey("commandBusy") && Convert.ToBoolean(frame["commandBusy"]);
+        frameLoading=frame.ContainsKey("loading") && Convert.ToBoolean(frame["loading"]);
         coverEnabled=s.ContainsKey("showCover") && Convert.ToBoolean(s["showCover"]);
         if(!coverEnabled)SetCoverHover(false);
         if((title!=noticeSong || artist!=noticePerformer) && hovering)infoClock.Restart();
@@ -1207,6 +1215,8 @@ sealed class TaskbarLyrics
 
     void RenderScroll(object sender,EventArgs e)
     {
+        // 所有屏幕共用动画时钟，结束加载立即恢复普通图标。
+        loadingSpin.Angle=frameLoading?(loadingAnimationClock.Elapsed.TotalMilliseconds*.4)%360:0;
         RenderPalette();RenderNoticePalette();
         if(coverFadeClock.IsRunning){
             double fraction=ClampRatio(coverFadeClock.Elapsed.TotalMilliseconds/transitionDuration);

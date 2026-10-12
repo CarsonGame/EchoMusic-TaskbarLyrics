@@ -186,3 +186,6 @@
 
 /* 歌曲信息配色与封面、按钮使用同一过渡时长。 */
 .tl-preview-animated .tl-preview-info-line,.tl-preview-animated .tl-preview-info-artist{transition:color var(--tl-transition-duration)}
+/* 加载图标独立旋转，不缩放按钮或改变其他控件亮度。 */
+.tl-preview-loading{animation:tl-loading-spin .9s linear infinite;transform-origin:center}
+@keyframes tl-loading-spin{to{transform:rotate(360deg)}}

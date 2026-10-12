@@ -98,6 +98,17 @@ test('单行与双行、翻译来自同一时钟', () => {
   assert.equal(makeFrame(snapshot,normalize({layout:'double'}),2100).secondary,'第三句');
   assert.equal(makeFrame(snapshot,normalize({layout:'double',secondary:'translation'}),2100).secondary,'two');
 });
+test('加载状态独立于播放意图，冻结进度并在成功、取消或失败后结束',()=>{
+  for(const playback of [{isLoading:true},{playbackState:'loading',isLoading:false}]){
+    const frame=makeFrame({...snapshot,playback:{...snapshot.playback,...playback}},DEFAULTS,9000);
+    assert.equal(frame.playing,true);assert.equal(frame.loading,true);assert.equal(frame.advancing,false);assert.equal(frame.coverTimeMs,1000);
+  }
+  for(const state of ['playing','paused','error']){
+    const frame=makeFrame({...snapshot,playback:{...snapshot.playback,isLoading:true,playbackState:state,isPlaying:state==='playing'}},DEFAULTS,1000);
+    assert.equal(frame.loading,false);
+  }
+  assert.equal(makeFrame(snapshot,DEFAULTS,1000).loading,false);
+});
 test('暂停停止推算，歌词偏移仍生效', () => {
   const paused=structuredClone(snapshot); paused.playback.isPlaying=false;
   assert.equal(makeFrame(paused,DEFAULTS,20000).text,'第一句');
