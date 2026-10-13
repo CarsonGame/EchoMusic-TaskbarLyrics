@@ -58,7 +58,12 @@ sealed class TaskbarLyrics
     [DllImport("user32.dll")] static extern bool GetCursorPos(out NativePoint point);
     [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(NativePoint point);
     [DllImport("shcore.dll")] static extern int SetProcessDpiAwareness(int awareness);
-    Window window;
+    UserControl window;
+    HwndSource nativeHost;
+    bool embedded,hostLost;
+    IntPtr boundTaskbar;
+    [DllImport("user32.dll")] static extern IntPtr SetParent(IntPtr hwnd,IntPtr parent);
+    [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr hwnd,ref NativePoint point);
     Grid coverHost,coverVisual,coverLayers,lyricsHost,controlsAnchor,interactionHost;
     RowDefinition infoRow,controlsRow,progressRow;
     bool hoverInfoEnabled=true;
@@ -219,12 +224,13 @@ sealed class TaskbarLyrics
     };
 
 
-    TaskbarLyrics(Display target)
+    TaskbarLyrics(Display target) : this(target,false) { }
+    TaskbarLyrics(Display target,bool floating)
     {
         display=target;shellEvent=OnShellEvent;
             // 嵌入 XAML，发布时无需额外 UI 文件或运行时安装。
             using (Stream stream = typeof(TaskbarLyrics).Assembly.GetManifestResourceStream("LyricsWindow.xaml"))
-                window = (Window)System.Windows.Markup.XamlReader.Load(stream);
+                window = (UserControl)System.Windows.Markup.XamlReader.Load(stream);
             primary = (TextBlock)window.FindName("Primary");
             secondary = (TextBlock)window.FindName("Secondary");
             primaryViewport = (Grid)window.FindName("PrimaryViewport");
@@ -270,30 +276,72 @@ sealed class TaskbarLyrics
             loadingGlyph=(System.Windows.Shapes.Path)window.FindName("LoadingGlyph");loadingSpin=(RotateTransform)window.FindName("LoadingSpin");
             previousButton.Click+=(sender,e)=>SendAction("previousTrack");playButton.Click+=(sender,e)=>SendAction("togglePlayback");nextButton.Click+=(sender,e)=>SendAction("nextTrack");favoriteButton.Click+=(sender,e)=>SendAction("toggleFavorite");
 
-        handle=new WindowInteropHelper(window).EnsureHandle();
-        SetWindowLong(handle,-20,GetWindowLong(handle,-20)|0x20|0x80|0x8000000);
-        HwndSource.FromHwnd(handle).AddHook(Hook);
+        try { CreateHost(!floating && IsWindow(target.Taskbar)); }
+        catch(Exception error) {
+            if(floating || !(error is System.ComponentModel.Win32Exception || error is InvalidOperationException || error is NotSupportedException))throw;
+            DestroyHost();Log("任务栏挂载失败，改用透明浮窗："+error.Message);CreateHost(false);
+        }
         instances.Add(this);
+    }
+    void CreateHost(bool child)
+    {
+        embedded=child;hostLost=false;boundTaskbar=display.Taskbar;ownerBar=IntPtr.Zero;
+        Rect area=display.Info.Monitor;
+        if(IsWindow(boundTaskbar))GetWindowRect(boundTaskbar,out area);
+        else area.Top=area.Bottom-(int)Math.Round(48*display.Scale);
+        // 原生宿主承载 XAML；透明子窗口使用新的每像素透明接口。
+        var parameters=new HwndSourceParameters("EchoMusic · 微光任务栏歌词") {
+            ParentWindow=child?boundTaskbar:IntPtr.Zero,
+            WindowStyle=child?0x46000000:unchecked((int)0x86000000),
+            ExtendedWindowStyle=0x80000A0|(child?0:8),
+            PositionX=child?0:area.Left,PositionY=child?0:area.Top,
+            Width=(int)Math.Round(360*display.Scale),Height=area.Height,
+            UsesPerPixelTransparency=true,TreatAsInputRoot=true,HwndSourceHook=Hook
+        };
+        nativeHost=new HwndSource(parameters);handle=nativeHost.Handle;
+        nativeHost.Disposed+=(sender,e)=>hostLost=true;
+        if(!IsWindow(handle) || (child && GetAncestor(handle,1)!=boundTaskbar))throw new InvalidOperationException("原生窗口挂载校验失败");
+        nativeHost.RootVisual=window;
+    }
+    bool HostAlive { get { return !hostLost && !nativeHost.IsDisposed && IsWindow(handle); } }
+    bool NeedsRebuild(Display target)
+    {
+        // Explorer 重建或屏幕任务栏改变时创建新宿主，不跨进程改挂旧窗口。
+        return !HostAlive || boundTaskbar!=target.Taskbar || (embedded && GetAncestor(handle,1)!=boundTaskbar);
+    }
+    void DestroyHost()
+    {
+        if(handle==IntPtr.Zero)return;
+        if(!nativeHost.IsDisposed) {
+            nativeHost.RootVisual=null;
+            uint process;
+            if(IsWindow(handle) && GetWindowThreadProcessId(handle,out process)!=0 && process==(uint)Process.GetCurrentProcess().Id) {
+                ShowWindow(handle,0);
+                if(embedded)SetParent(handle,IntPtr.Zero);
+            }
+            nativeHost.Dispose();
+        }
+        handle=IntPtr.Zero;
     }
     void Open()
     {
-        // 首次显示前移到目标屏，避免 WPF 沿用当前活动屏的绘制坐标。
-        Rect initial=display.Info.Monitor;
-        if(display.Taskbar!=IntPtr.Zero)GetWindowRect(display.Taskbar,out initial);
-        else initial.Top=initial.Bottom-(int)Math.Round(48*display.Scale);
-        SetWindowPos(handle,IntPtr.Zero,initial.Left,initial.Top,(int)(360*display.Scale),initial.Height,0x14);
-        window.Opacity=0;window.Show();ShowWindow(handle,0);
+        window.Opacity=0;ShowWindow(handle,0);
         CompositionTarget.Rendering+=RenderScroll;
         pointerTimer=new DispatcherTimer(DispatcherPriority.Input){Interval=TimeSpan.FromMilliseconds(30)};
         pointerTimer.Tick+=(sender,e)=>UpdateHover();pointerTimer.Start();
-        foregroundHook=SetWinEventHook(3,3,IntPtr.Zero,shellEvent,0,0,2);
-        reorderHook=SetWinEventHook(0x8002,0x8004,IntPtr.Zero,shellEvent,0,0,2);
+        if(!embedded) {
+            foregroundHook=SetWinEventHook(3,3,IntPtr.Zero,shellEvent,0,0,2);
+            reorderHook=SetWinEventHook(0x8002,0x8004,IntPtr.Zero,shellEvent,0,0,2);
+        }
     }
     void Close()
     {
+        if(closed)return;
         closed=true;CancelScrub();CloseTrackNotice();pointerTimer.Stop();instances.Remove(this);
         CompositionTarget.Rendering-=RenderScroll;
-        UnhookWinEvent(foregroundHook);UnhookWinEvent(reorderHook);window.Close();
+        UnhookWinEvent(foregroundHook);UnhookWinEvent(reorderHook);
+        // 在自身 UI 线程解挂后销毁，兼容父任务栏已销毁的情形。
+        DestroyHost();
     }
     object Report()
     {
@@ -321,7 +369,7 @@ sealed class TaskbarLyrics
                             hasButtonTooltips=previousButton.ToolTip!=null || playButton.ToolTip!=null || nextButton.ToolTip!=null || favoriteButton.ToolTip!=null,
                             maskVisible=masking, primaryMaskWidth=primaryMaskWidth,secondaryMaskWidth=secondaryMaskWidth,
                             singleText=true,primaryColorBoundary=primaryProgress.GradientStops[1].Offset,secondaryColorBoundary=secondaryProgress.GradientStops[1].Offset,
-                            shellRaises=shellRaises,positionUpdates=positionUpdates,styleUpdates=styleUpdates, aboveTaskbar=AboveTaskbar(), shellCoversLyrics=ShellCoversLyrics(),
+                            embedded=embedded && GetAncestor(handle,1)==boundTaskbar,hostMode=embedded?"taskbar-child":"floating",parent=GetAncestor(handle,1).ToInt64(),shellRaises=shellRaises,positionUpdates=positionUpdates,styleUpdates=styleUpdates, aboveTaskbar=AboveTaskbar(), shellCoversLyrics=ShellCoversLyrics(),
                             owned=ownerBar!=IntPtr.Zero && GetWindow(handle,4)==ownerBar,owner=GetWindow(handle,4).ToInt64(),taskbar=display.Taskbar.ToInt64(),windowBand=selfBand,taskbarBand=barBand,
                             hoverEnabled=hoverEnabled,controlsVisible=hovering,controlsEnabled=playButton.IsEnabled,isFavorite=favorite,playing=clockPlaying,
                             coverVisible=coverEnabled,coverLoaded=coverImage.Source!=null,coverShape=coverVisual.Clip is EllipseGeometry?"circle":"rectangle",coverAngle=coverRotation.Angle,
@@ -400,7 +448,7 @@ sealed class TaskbarLyrics
                     foreach(string id in new List<string>(surfaces.Keys))if(!wanted.Contains(id)){surfaces[id].Close();surfaces.Remove(id);}
                     foreach(var target in targets) {
                         TaskbarLyrics surface;
-                        if(surfaces.TryGetValue(target.Info.Device,out surface) && !IsWindow(surface.handle)){surface.Close();surfaces.Remove(target.Info.Device);}
+                        if(surfaces.TryGetValue(target.Info.Device,out surface) && surface.NeedsRebuild(target)){surface.Close();surfaces.Remove(target.Info.Device);}
                         if(!surfaces.TryGetValue(target.Info.Device,out surface)){surface=new TaskbarLyrics(target);surface.Open();surfaces.Add(target.Info.Device,surface);}
                         surface.display=target;
                         surface.Apply(frame);
@@ -425,6 +473,7 @@ sealed class TaskbarLyrics
 
     IntPtr Hook(IntPtr hwnd,int message,IntPtr w,IntPtr l,ref bool handled)
     {
+        if(embedded && message==0x3d) { handled=true;return IntPtr.Zero; }
         if (message == 0x21) { handled=true; return new IntPtr(3); }
         if (message == 0x84) {
             // 封面、按钮与进度条接收点击，其余区域仍穿透到任务栏。
@@ -607,6 +656,7 @@ sealed class TaskbarLyrics
     }
     void UpdateHover()
     {
+        if(closed || !HostAlive)return;
         NativePoint point=new NativePoint();Rect bounds;
         bool cursor=GetCursorPos(out point);
         if(scrubbing){SetHover(true);SetProgressHover(true);return;}
@@ -807,6 +857,7 @@ sealed class TaskbarLyrics
 
     void OnShellEvent(IntPtr hook,uint evt,IntPtr hwnd,int objectId,int childId,uint threadId,uint time)
     {
+        if(closed || embedded || !HostAlive)return;
         IntPtr bar=display.Taskbar;
         // 合并 Shell 事件并检查实际遮挡，避免反复重排挤占歌词绘制。
         if ((evt!=3 && (objectId!=0 || childId!=0)) || !allowDisplay || !IsShellSurface(hwnd,bar)) return;
@@ -823,8 +874,9 @@ sealed class TaskbarLyrics
 
     void OwnTaskbar(IntPtr bar)
     {
+        if(embedded)return;
         if(ownerBar==bar && GetWindow(handle,4)==bar)return;
-        // 关联任务栏所有者，保持透明浮窗高于任务栏，避免跨进程子窗口绘制异常。
+        // 回退浮窗关联任务栏所有者，保留原来的悬浮与穿透行为。
         SetWindowLongPtr(handle,-8,bar);ownerBar=GetWindow(handle,4);
     }
     void Position(Rect area)
@@ -833,15 +885,17 @@ sealed class TaskbarLyrics
         bool moved=area.Left!=actual.Left || area.Top!=actual.Top || area.Width!=actual.Width || area.Height!=actual.Height;
         bool showing=!IsWindowVisible(handle);
         if(!moved && !showing)return;
-        // 位置变化保留原有层级；首次显示才同时进入置顶层。
-        uint flags=0x10u | (showing?0x40u:0x4u);
-        if(SetWindowPos(handle,new IntPtr(-1),area.Left,area.Top,area.Width,area.Height,flags))positionUpdates++;
+        // 子窗口使用客户区坐标；浮窗才在首次显示时进入置顶层。
+        var point=new NativePoint{X=area.Left,Y=area.Top};
+        if(embedded && !ScreenToClient(boundTaskbar,ref point))return;
+        uint flags=0x210u | (showing?0x40u:0x4u);
+        if(SetWindowPos(handle,embedded?IntPtr.Zero:new IntPtr(-1),point.X,point.Y,area.Width,area.Height,flags))positionUpdates++;
         if(showing)unresolvedShellCover=IntPtr.Zero;
         EnsureLayer();
     }
     void EnsureLayer()
     {
-        if(!allowDisplay || !IsWindowVisible(handle))return;
+        if(embedded || closed || !HostAlive || !allowDisplay || !IsWindowVisible(handle))return;
         // 每帧检查实际层级，异常立即恢复；正常时不调用置顶接口。
         bool above=AboveTaskbar(),topmost=(GetWindowLong(handle,-20)&8)!=0;IntPtr cover=FindShellCover();
         if(cover==IntPtr.Zero)unresolvedShellCover=IntPtr.Zero;
@@ -851,8 +905,9 @@ sealed class TaskbarLyrics
     }
     void RestoreLayer()
     {
+        if(embedded || !HostAlive)return;
         IntPtr cover=FindShellCover();
-        if(!SetWindowPos(handle,new IntPtr(-1),0,0,0,0,0x13))return;
+        if(!SetWindowPos(handle,new IntPtr(-1),0,0,0,0,0x213))return;
         shellRaises++;
         // 仅对不同系统层保留遮挡记录，普通层的连续变化必须继续恢复。
         uint coverBand,selfBand;
@@ -863,7 +918,8 @@ sealed class TaskbarLyrics
     bool AboveTaskbar()
     {
         IntPtr bar=display.Taskbar;
-        if(bar==IntPtr.Zero || GetParent(handle)==bar)return true;
+        if(embedded)return GetAncestor(handle,1)==boundTaskbar;
+        if(bar==IntPtr.Zero || GetWindow(handle,4)==bar)return true;
         for(IntPtr item=GetWindow(handle,2);item!=IntPtr.Zero;item=GetWindow(item,2)) if(item==bar) return true;
         return false;
     }
@@ -871,6 +927,7 @@ sealed class TaskbarLyrics
     bool ShellCoversLyrics(){return FindShellCover()!=IntPtr.Zero;}
     IntPtr FindShellCover()
     {
+        if(embedded || !HostAlive)return IntPtr.Zero;
         // 开始菜单透明宿主也可能覆盖任务栏区域，检查实际 Shell 层级。
         Rect lyrics;GetWindowRect(handle,out lyrics);
         for(IntPtr item=GetWindow(handle,3);item!=IntPtr.Zero;item=GetWindow(item,3)) {
@@ -897,6 +954,7 @@ sealed class TaskbarLyrics
 
     void Apply(Dictionary<string,object> frame)
     {
+        if(closed || NeedsRebuild(display))return;
         // 辅助程序先更新、播放器尚未重载时，也兼容旧版配置快照。
         var s=new Dictionary<string,object>(defaults);
         foreach(var setting in (Dictionary<string,object>)frame["settings"])s[setting.Key]=setting.Value;
@@ -1215,6 +1273,7 @@ sealed class TaskbarLyrics
 
     void RenderScroll(object sender,EventArgs e)
     {
+        if(closed || !HostAlive)return;
         // 所有屏幕共用动画时钟，结束加载立即恢复普通图标。
         loadingSpin.Angle=frameLoading?(loadingAnimationClock.Elapsed.TotalMilliseconds*.4)%360:0;
         RenderPalette();RenderNoticePalette();

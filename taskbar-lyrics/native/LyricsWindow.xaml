@@ -1,9 +1,5 @@
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="EchoMusic · 微光任务栏歌词" WindowStyle="None" ResizeMode="NoResize"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
-        ShowActivated="False" Topmost="True" Focusable="False" Width="360" Height="48">
-  <Window.Resources>
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Background="Transparent" Focusable="False">
+  <UserControl.Resources>
     <SolidColorBrush x:Key="PrimaryWaiting" Color="#F1F7F6"/>
     <SolidColorBrush x:Key="SecondaryWaiting" Color="#B4C3C1"/>
     <SolidColorBrush x:Key="PrimaryAccent" Color="#85DCD0"/>
@@ -45,7 +41,7 @@
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
-  </Window.Resources>
+  </UserControl.Resources>
   <Grid x:Name="Root" Margin="0" ClipToBounds="True">
     <!-- 内容统一上下偏移，窗口继续贴合任务栏。 -->
     <Grid x:Name="TaskbarContent">
@@ -136,4 +132,4 @@
     </Grid>
     </Grid>
   </Grid>
-</Window>
+</UserControl>
