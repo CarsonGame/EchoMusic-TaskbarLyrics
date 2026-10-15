@@ -1,4 +1,5 @@
 import { DEFAULTS, normalize, makeFrame, playbackLoading, coverPaletteFromPixels, coverInformationColor, controlsPalette, previewPalettes, noticePalette, formatPlaybackTime } from './core.mjs';
+import { informationNavigation, createInformationNavigator } from './navigation.mjs';
 // @compiled-panel
 export async function activate(ctx) {
   if (ctx.electron.platform !== 'win32') throw new Error('此插件仅支持 Windows。');
@@ -44,7 +45,8 @@ export async function activate(ctx) {
   const currentFrame = () => {
     const information=informationAccent(settings);
     if(information)coverInformationAccent.value=information;
-    const frame={...makeFrame({...snapshot,playback:syncedPlayback.value},settings,Date.now(),coverAccent.value,information),commandBusy};
+    const navigation=informationNavigation(snapshot,ctx.vue.unref(ctx.player?.currentTrack));
+    const frame={navigation,...makeFrame({...snapshot,playback:syncedPlayback.value},settings,Date.now(),coverAccent.value,information),commandBusy};
     if (frame.coverUrl) {
       frame.coverSourceUrl=frame.coverUrl;
       frame.coverUrl=`${server.origin}/cover?token=${token}&key=${coverRevision}`;
@@ -131,6 +133,10 @@ export async function activate(ctx) {
       return { status:502,body:JSON.stringify({error:error.message}) };
     } finally { clearTimeout(timer);commandWaiters.delete(finish);commandBusy=false; }
   };
+  const navigateInformation=createInformationNavigator(ctx,async()=>{
+    updateSnapshot(await ctx.nowPlaying.getSnapshot());
+    return {snapshot,track:ctx.vue.unref(ctx.player?.currentTrack),settings};
+  });
   const showMainWindow = async request => {
     if(request.method!=='POST')return {status:405,body:''};
     if(!settings.enabled || !settings.showCover)return {status:403,body:''};
@@ -149,6 +155,7 @@ export async function activate(ctx) {
   const server = await ctx.webServer.listen(request => {
     if (!alive || request.query.token !== token) return { status: 403, body: '' };
     if (request.path === '/command') return control(request);
+    if (request.path === '/navigate-information') return navigateInformation(request);
     if (request.path === '/show-main') return showMainWindow(request);
     if (request.path === '/cover') return cover(request);
     // 原生程序报告实际屏幕，设置页使用相同的播放器下拉组件。

@@ -92,8 +92,8 @@
     <Grid x:Name="InteractionHost" VerticalAlignment="Center">
     <Grid.RowDefinitions><RowDefinition x:Name="InfoRow" Height="0"/><RowDefinition x:Name="ControlsRow" Height="0"/><RowDefinition x:Name="ProgressRow" Height="0"/></Grid.RowDefinitions>
     <!-- 歌名与歌手同排，信息、按钮、进度都约束在任务栏内。 -->
-    <Viewbox x:Name="NoticeViewport" Grid.Row="0" MaxHeight="12" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" Visibility="Collapsed" IsHitTestVisible="False">
-      <Border x:Name="TrackNoticeSurface" Width="180" Background="Transparent">
+    <Viewbox x:Name="NoticeViewport" Grid.Row="0" MaxHeight="12" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" Visibility="Collapsed">
+      <Border x:Name="TrackNoticeSurface" Width="180" Background="#01000000">
         <StackPanel x:Name="NoticeLine" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
           <!-- 同一段文字共用裁切与位移，两部分保留各自文字样式。 -->
           <Grid x:Name="NoticeTitleViewport" Width="180" ClipToBounds="True"><Grid Width="{Binding Width, ElementName=NoticeTitle}" HorizontalAlignment="{Binding HorizontalAlignment, ElementName=NoticeTitle}"><TextBlock x:Name="NoticeTitle" FontSize="15" FontWeight="Medium" TextWrapping="NoWrap" HorizontalAlignment="Left"><TextBlock.RenderTransform><TranslateTransform x:Name="NoticeTitleShift"/></TextBlock.RenderTransform><Run x:Name="NoticeSongRun" Foreground="{StaticResource NoticeTitleInk}"/><Run x:Name="NoticeSeparatorRun" Foreground="{StaticResource NoticeArtistInk}"/><Run x:Name="NoticeArtistRun" Foreground="{StaticResource NoticeArtistInk}"/></TextBlock></Grid></Grid>

@@ -79,6 +79,10 @@ sealed class TaskbarLyrics
     StackPanel noticeLine;
     System.Windows.Documents.Run noticeSongRun,noticeSeparatorRun,noticeArtistRun;
     string noticeSong="",noticePerformer="";
+    readonly List<string> noticeArtists=new List<string>();
+    int noticePressedTarget=-2;
+    string noticePressedTrack="",noticePressedArtist="";
+    bool noticePointerOver;
     bool noticeArtistVisible;
     bool noticeVisible;
     Border trackNoticeSurface;
@@ -253,6 +257,23 @@ sealed class TaskbarLyrics
             noticeTitleViewport=(Grid)window.FindName("NoticeTitleViewport");
             noticeTitle=(TextBlock)window.FindName("NoticeTitle");
             noticeTitleShift=(TranslateTransform)window.FindName("NoticeTitleShift");
+            noticeTitle.MouseEnter+=(sender,e)=>SetNoticePointer(true);
+            noticeTitle.MouseLeave+=(sender,e)=>SetNoticePointer(false);
+            noticeTitle.MouseMove+=(sender,e)=>noticeTitle.Cursor=NoticeTarget(e.GetPosition(noticeTitle))>=-1?System.Windows.Input.Cursors.Hand:System.Windows.Input.Cursors.Arrow;
+            noticeTitle.MouseLeftButtonDown+=(sender,e)=>{
+                noticePressedTarget=NoticeTarget(e.GetPosition(noticeTitle));
+                noticePressedTrack=controlTrackId;noticePressedArtist=noticePressedTarget>=0?noticeArtists[noticePressedTarget]:"";
+                if(noticePressedTarget>=-1)noticeTitle.CaptureMouse();e.Handled=true;
+            };
+            noticeTitle.MouseLeftButtonUp+=(sender,e)=>{
+                Point released=e.GetPosition(noticeTitle);
+                int clickedTarget=InNotice(noticeTitle.PointToScreen(released))?NoticeTarget(released):-2,pressed=noticePressedTarget;
+                string track=noticePressedTrack,artist=noticePressedArtist;
+                noticePressedTarget=-2;noticeTitle.ReleaseMouseCapture();
+                if(clickedTarget==pressed && clickedTarget>=-1 && track==controlTrackId && (clickedTarget<0 || artist==noticeArtists[clickedTarget]))NavigateInformation(clickedTarget,track,artist);
+                e.Handled=true;
+            };
+            noticeTitle.LostMouseCapture+=(sender,e)=>noticePressedTarget=-2;
             controlsAnchor=(Grid)window.FindName("ControlsAnchor");
             interactionHost=(Grid)window.FindName("InteractionHost");infoRow=(RowDefinition)window.FindName("InfoRow");controlsRow=(RowDefinition)window.FindName("ControlsRow");progressRow=(RowDefinition)window.FindName("ProgressRow");
             coverImage=(Image)window.FindName("CoverImage");coverFallback=(Border)window.FindName("CoverFallback");
@@ -478,7 +499,7 @@ sealed class TaskbarLyrics
         if (message == 0x84) {
             // 封面、按钮与进度条接收点击，其余区域仍穿透到任务栏。
             var point=new Point(unchecked((short)(l.ToInt64()&0xffff)),unchecked((short)((l.ToInt64()>>16)&0xffff)));
-            handled=true;return new IntPtr(scrubbing || (allowDisplay && InCover(point)) || (hovering && (InControls(point) || InProgress(point)))?1:-1);
+            handled=true;return new IntPtr(scrubbing || (allowDisplay && InCover(point)) || (hovering && (InControls(point) || InProgress(point) || InNotice(point)))?1:-1);
         }
         return IntPtr.Zero;
     }
@@ -566,7 +587,7 @@ sealed class TaskbarLyrics
         value=value && (hoverEnabled || progressEnabled || hoverInfoEnabled);
         double target=value?1:0;
         if(target!=hoverTarget){
-            hoverFrom=hoverAmount;hoverTarget=target;hoverClock.Restart();if(value)infoClock.Restart();
+            hoverFrom=hoverAmount;hoverTarget=target;hoverClock.Restart();if(value){infoClock.Restart();if(noticePointerOver)infoClock.Stop();}
         }
         if(!allowDisplay){hoverAmount=hoverTarget=0;hoverClock.Reset();}
         hovering=value;
@@ -671,6 +692,7 @@ sealed class TaskbarLyrics
         SetCoverHover(inside && InCover(new Point(point.X,point.Y)));
         // 信息也在宿主内；先确认窗口未被遮挡，再更新悬停。
         SetHover(inside);
+        SetNoticePointer(inside && InNotice(new Point(point.X,point.Y)));
         var screen=new Point(point.X,point.Y);
         // 单独显示进度条时展开时间会移动布局，保留时间区域内的悬停。
         SetProgressHover(inside && (InProgress(screen) || (!hoverEnabled && progressHovered && InProgressTime(screen))));
@@ -692,6 +714,53 @@ sealed class TaskbarLyrics
         if(progressTimeViewport.Visibility!=Visibility.Visible)return false;
         Point first=progressTimeViewport.PointToScreen(new Point(0,0)),last=progressTimeViewport.PointToScreen(new Point(progressTimeViewport.ActualWidth,progressTimeViewport.ActualHeight));
         return new System.Windows.Rect(first,last).Contains(screen);
+    }
+    void SetNoticePointer(bool value)
+    {
+        value=value && hoverInfoEnabled && noticeVisible;
+        if(value==noticePointerOver)return;
+        noticePointerOver=value;
+        // 指针停在信息上时暂停滚动，避免按下和松开时目标发生位移。
+        if(value)infoClock.Stop();else if(hovering)infoClock.Start();
+    }
+    bool InNotice(Point screen)
+    {
+        if(!hoverInfoEnabled || !noticeVisible || noticeViewport.Visibility!=Visibility.Visible)return false;
+        Point first=noticeTitleViewport.PointToScreen(new Point(0,0)),last=noticeTitleViewport.PointToScreen(new Point(noticeTitleViewport.ActualWidth,noticeTitleViewport.ActualHeight));
+        return new System.Windows.Rect(first,last).Contains(screen);
+    }
+    static bool InNoticeRange(System.Windows.Documents.Run run,int offset,int length,Point point)
+    {
+        if(length<=0)return false;
+        // 使用实际文字排版位置，兼容滚动位移、字号及各屏 DPI。
+        var first=run.ContentStart.GetPositionAtOffset(offset).GetCharacterRect(System.Windows.Documents.LogicalDirection.Forward);
+        var last=run.ContentStart.GetPositionAtOffset(offset+length).GetCharacterRect(System.Windows.Documents.LogicalDirection.Backward);
+        return point.X>=Math.Min(first.Left,last.Left) && point.X<Math.Max(first.Right,last.Right) && point.Y>=Math.Min(first.Top,last.Top) && point.Y<=Math.Max(first.Bottom,last.Bottom);
+    }
+    int NoticeTarget(Point point)
+    {
+        if(!hoverInfoEnabled || !noticeVisible)return -2;
+        if(InNoticeRange(noticeSongRun,0,noticeSongRun.Text.Length,point))return -1;
+        if(noticeArtistVisible){
+            int offset=0;
+            for(int i=0;i<noticeArtists.Count;i++){
+                if(InNoticeRange(noticeArtistRun,offset,noticeArtists[i].Length,point))return i;
+                offset+=noticeArtists[i].Length+3;
+            }
+        }
+        return -2;
+    }
+    async void NavigateInformation(int target,string track,string artist)
+    {
+        if(!hoverInfoEnabled || !allowDisplay || mainWindowPending || track!=controlTrackId)return;
+        mainWindowPending=true;
+        try{
+            var url=new UriBuilder(stateEndpoint);url.Path="/navigate-information";
+            url.Query=stateEndpoint.Query.TrimStart('?')+"&kind="+(target<0?"song":"artist")+"&trackId="+Uri.EscapeDataString(track)+"&index="+target.ToString(CultureInfo.InvariantCulture)+"&artist="+Uri.EscapeDataString(artist);
+            using(var response=await actions.PostAsync(url.Uri,new ByteArrayContent(new byte[0])))
+                if(!response.IsSuccessStatusCode)Log("打开歌曲信息失败：HTTP "+(int)response.StatusCode);
+        }catch(Exception error){Log("打开歌曲信息失败："+error.Message);}
+        finally{mainWindowPending=false;}
     }
     static double ClampRatio(double value){return double.IsNaN(value)?0:Math.Max(0,Math.Min(1,value));}
     async void ShowMainWindow()
@@ -1002,7 +1071,13 @@ sealed class TaskbarLyrics
         frameLoading=frame.ContainsKey("loading") && Convert.ToBoolean(frame["loading"]);
         coverEnabled=s.ContainsKey("showCover") && Convert.ToBoolean(s["showCover"]);
         if(!coverEnabled)SetCoverHover(false);
-        if((title!=noticeSong || artist!=noticePerformer) && hovering)infoClock.Restart();
+        noticeArtists.Clear();
+        if(frame.ContainsKey("navigation")) {
+            var navigation=(Dictionary<string,object>)frame["navigation"];
+            foreach(var item in (System.Collections.IEnumerable)navigation["artists"])noticeArtists.Add(Convert.ToString(((Dictionary<string,object>)item)["name"]));
+        } else if(!String.IsNullOrWhiteSpace(artist))noticeArtists.Add(artist);
+        artist=String.Join(" / ",noticeArtists.ToArray());
+        if((title!=noticeSong || artist!=noticePerformer) && hovering){infoClock.Restart();if(noticePointerOver)infoClock.Stop();}
         noticeSong=title;noticePerformer=artist;
         noticeTitle.FontFamily=primary.FontFamily;
         StyleNotice(s,frame);
