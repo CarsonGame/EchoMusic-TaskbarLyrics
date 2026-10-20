@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node build-js.mjs",
-    "test": "node --test tests/core.test.mjs tests/navigation.test.mjs",
-    "test:native": "node tests/native-lifecycle-check.mjs && node tests/native-information-check.mjs"
+    "test": "node --test tests/core.test.mjs tests/navigation.test.mjs tests/maintenance.test.mjs",
+    "test:native": "node tests/native-lifecycle-check.mjs && node tests/native-information-check.mjs && node tests/native-space-check.mjs"
   },
   "devDependencies": {
     "@vue/compiler-dom": "3.5.22"

@@ -6,6 +6,7 @@ export const DEFAULTS = Object.freeze({
   "layout": "double",
   "secondary": "next",
   "width": 360,
+  "minimumControlsWidth": 90,
   "fontSize": 16,
   "primaryFontSize": 16,
   "secondaryFontSize": 12,
@@ -20,6 +21,7 @@ export const DEFAULTS = Object.freeze({
   "controlsIconColor": "#F1F7F6",
   "controlsBackgroundColor": "#202831",
   "controlsBackgroundOpacity": 0,
+  "controlsCornerRadius": 6,
   "buttonHoverBackground": false,
   "buttonHoverColor": "#304449",
   "buttonPressedBackground": false,
@@ -70,7 +72,7 @@ export function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
+  for (const [key, min, max] of [['width',120,900],['minimumControlsWidth',0,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['controlsCornerRadius',0,12],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
   // 兼容旧歌手字号字段，整段歌曲信息统一沿用歌名字号。

@@ -11,6 +11,10 @@ $taskCompilerArgs = @(
     ('/reference:' + (Join-Path $taskWpfRoot 'PresentationFramework.dll')),
     ('/reference:' + (Join-Path $taskWpfRoot 'PresentationCore.dll')),
     ('/reference:' + (Join-Path $taskWpfRoot 'WindowsBase.dll')),
+    ('/reference:' + (Join-Path $taskWpfRoot 'UIAutomationClient.dll')),
+    ('/reference:' + (Join-Path $taskWpfRoot 'UIAutomationTypes.dll')),
+    (Join-Path $taskPluginRoot 'native\TaskbarSpace.cs'),
+    (Join-Path $taskPluginRoot 'native\TaskbarEvents.cs'),
     (Join-Path $taskPluginRoot 'native\TaskbarLyrics.cs')
 )
 & 'C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe' @taskCompilerArgs

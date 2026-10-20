@@ -50,8 +50,8 @@
 .tl-subheading{font-size:11px;font-weight:600;opacity:.7;padding-top:10px;border-top:1px solid var(--tl-border)}
 .tl-subheading:first-child{padding-top:0;border-top:0}
 /* 按钮使用固定尺寸，歌词长度只影响居中位置。 */
-.tl-preview-controls{position:absolute;left:50%;top:max(25px,calc(var(--tl-info-height,12px) + 12px));transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;width:144px;height:24px;padding:2px 4px;box-sizing:border-box;border-radius:20px;background:#ffffff0e;color:#eef9f7;opacity:0;transition:opacity .13s;pointer-events:none}
-.tl-preview-button{display:grid;place-items:center;justify-self:center;width:30px;height:20px;padding:2px;border:0;border-radius:15px;background:transparent;color:inherit;cursor:pointer}
+.tl-preview-controls{position:absolute;left:50%;top:max(25px,calc(var(--tl-info-height,12px) + 12px));transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;width:144px;height:24px;padding:2px 4px;box-sizing:border-box;border-radius:var(--tl-controls-radius,6px);background:#ffffff0e;color:#eef9f7;opacity:0;transition:opacity .13s;pointer-events:none}
+.tl-preview-button{display:grid;place-items:center;justify-self:center;width:30px;height:20px;padding:2px;border:0;border-radius:var(--tl-controls-radius,6px);background:transparent;color:inherit;cursor:pointer}
 .tl-preview-button:hover{background:var(--tl-button-hover,transparent)}
 .tl-preview-button:active{background:var(--tl-button-pressed,transparent)}
 .tl-preview-button:focus-visible{outline:1px solid currentColor;outline-offset:-2px}

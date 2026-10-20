@@ -5,6 +5,18 @@ const snapshot = {
   playback:{trackId:'1',title:'歌曲',artist:'歌手',currentTime:1,updatedAt:1000,isPlaying:true,playbackRate:1,duration:10},
   lyric:{trackId:'1',timeOffset:0,lines:[{time:0,text:'第一句',translated:'one'},{time:2,text:'第二句',translated:'two'},{time:5,text:'第三句'}]}
 };
+test('控件最小宽度默认 90px，允许 0 并传递到原生宿主',()=>{
+  assert.equal(DEFAULTS.minimumControlsWidth,90);
+  assert.equal(normalize({}).minimumControlsWidth,90);
+  assert.equal(normalize({minimumControlsWidth:40}).minimumControlsWidth,40);
+  assert.equal(normalize({minimumControlsWidth:0}).minimumControlsWidth,0);
+  assert.equal(normalize({minimumControlsWidth:-10}).minimumControlsWidth,0);
+  assert.equal(normalize({minimumControlsWidth:2000}).minimumControlsWidth,900);
+  assert.equal(normalize({minimumControlsWidth:NaN}).minimumControlsWidth,90);
+  const settings=normalize({minimumControlsWidth:240});
+  assert.equal(makeFrame(snapshot,settings,1000).settings.minimumControlsWidth,240);
+  assert.equal(makeFrame(snapshot,normalize({minimumControlsWidth:0}),1000).settings.minimumControlsWidth,0);
+});
 test('歌曲信息选取不同色相的稳定封面色块，避开控件配色与噪点',()=>{
   const pixels=[];
   for(const [color,count] of [[[220,30,20],700],[[20,210,50],250],[[20,50,210],73],[[230,40,30],1]])for(let i=0;i<count;i++)pixels.push(...color,255);

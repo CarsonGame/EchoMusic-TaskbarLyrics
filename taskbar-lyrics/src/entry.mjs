@@ -1,5 +1,6 @@
 import { DEFAULTS, normalize, makeFrame, playbackLoading, coverPaletteFromPixels, coverInformationColor, controlsPalette, previewPalettes, noticePalette, formatPlaybackTime } from './core.mjs';
 import { informationNavigation, createInformationNavigator } from './navigation.mjs';
+import { createMaintenance, resolvePluginToggle } from './maintenance.mjs';
 // @compiled-panel
 export async function activate(ctx) {
   if (ctx.electron.platform !== 'win32') throw new Error('此插件仅支持 Windows。');
@@ -8,6 +9,7 @@ export async function activate(ctx) {
   let alive = true;
   let pid = 0;
   let launchPending = false;
+  let maintenance;
   let commandBusy = false;
   let mainWindowPending = false;
   let coverRevision = 1;
@@ -154,6 +156,7 @@ export async function activate(ctx) {
   };
   const server = await ctx.webServer.listen(request => {
     if (!alive || request.query.token !== token) return { status: 403, body: '' };
+    if (request.path === '/maintenance') return maintenance.handle(request);
     if (request.path === '/command') return control(request);
     if (request.path === '/navigate-information') return navigateInformation(request);
     if (request.path === '/show-main') return showMainWindow(request);
@@ -168,7 +171,8 @@ export async function activate(ctx) {
     return { headers: { 'content-type':'application/json; charset=utf-8', 'cache-control':'no-store' }, body: JSON.stringify(currentFrame()) };
   });
   if (!server.ok) throw new Error(server.error);
-  const start = async () => {
+  const start = async (updating=false) => {
+    if(maintenance?.active && !updating)throw new Error('插件正在更新，请稍后重试');
     if (launchPending || !alive) return;
     launchPending = true;
     try {
@@ -179,13 +183,30 @@ export async function activate(ctx) {
       else pid = result.pid;
     } finally { launchPending = false; }
   };
-  ctx.dispose(async () => { alive = false; for (const waiter of commandWaiters) waiter({playback:null});if (pid) await ctx.process.terminate(pid); });
+  maintenance=createMaintenance({
+    stop:async()=>{
+      if(launchPending)throw new Error('歌词程序正在启动，请稍后重试');
+      if(pid){const result=await ctx.process.terminate(pid);if(result?.ok===false)throw new Error(result.error || '停止歌词程序失败');pid=0;}
+    },
+    start:()=>start(true),enabled:()=>alive && settings.enabled,
+    resolveToggle:()=>resolvePluginToggle(ctx),warn:message=>ctx.toast.warning(message)
+  });
+  ctx.dispose(async () => { alive = false; maintenance.dispose(); for (const waiter of commandWaiters) waiter({playback:null});if (pid) await ctx.process.terminate(pid); });
   const panel = ctx.vue.defineComponent({
     name:'TaskbarLyricsSettings',
     components: Object.fromEntries(['Select','Slider','Switch','Button','InputNumber'].map(name => [name,ctx.vue.defineAsyncComponent(ctx.ui.components[name])])),
     render:createPanelRender(ctx.vue),
     setup() {
       const draft = ctx.vue.reactive({ ...settings });
+      // 预览按设置宽度展示收起规则，实际空位由每块任务栏独立检测。
+      const previewCapacity=ctx.vue.computed(()=>{
+        const width=Number(draft.width),cover=draft.showCover && width>=44;
+        // 0 是有效阈值，不用逻辑或回退到默认值。
+        const minimum=Number(draft.minimumControlsWidth);
+        const requiredWidth=8+(cover?44:0)+Math.max(0,Number.isFinite(minimum)?minimum:90);
+        const lyrics=width>=requiredWidth;
+        return {cover,lyrics,requiredWidth,width:lyrics?width:cover?44:0};
+      });
       // 界面显示透明度，存储仍用原有 alpha，保留已有配置的视觉效果。
       const transparency=ctx.vue.computed({get:()=>100-draft.opacity,set:value=>{draft.opacity=100-Number(value);}});
       const backgroundTransparency=ctx.vue.computed({get:()=>100-draft.controlsBackgroundOpacity,set:value=>{draft.controlsBackgroundOpacity=100-Number(value);}});
@@ -285,7 +306,7 @@ export async function activate(ctx) {
         if (settings.enabled && !pid) await start();
       });
       const reset = () => { Object.assign(draft, DEFAULTS); return save(); };
-      return { draft, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
+      return { draft, previewCapacity, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
     }
   });
   ctx.ui.settings.define({ title:'任务栏歌词 · 微光', component:panel });

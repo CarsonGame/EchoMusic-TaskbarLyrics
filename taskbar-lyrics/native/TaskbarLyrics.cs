@@ -29,6 +29,11 @@ sealed class TaskbarLyrics
     [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor,int type,out uint x,out uint y);
     sealed class Display { public IntPtr Monitor,Taskbar; public MonitorInfo Info; public double Scale; }
     Display display;
+    readonly TaskbarSpaceMonitor taskbarSpace=new TaskbarSpaceMonitor();
+    readonly TaskbarSpaceStability taskbarSpaceStability=new TaskbarSpaceStability();
+    Dictionary<string,object> latestFrame;
+    DispatcherTimer spaceLayoutTimer;
+    bool lyricsAvailable=true;
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string name, string title);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string cls,string title);
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW",SetLastError=true)] static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
@@ -59,6 +64,9 @@ sealed class TaskbarLyrics
     [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(NativePoint point);
     [DllImport("shcore.dll")] static extern int SetProcessDpiAwareness(int awareness);
     UserControl window;
+    GeometryGroup spaceClip;
+    bool spaceClipActive;
+    System.Windows.Rect[] spaceClipParts=new System.Windows.Rect[0];
     HwndSource nativeHost;
     bool embedded,hostLost;
     IntPtr boundTaskbar;
@@ -173,6 +181,7 @@ sealed class TaskbarLyrics
         {"layout","double"},
         {"secondary","next"},
         {"width",360},
+        {"minimumControlsWidth",90},
         {"fontSize",16},
         {"primaryFontSize",16},
         {"secondaryFontSize",12},
@@ -187,6 +196,7 @@ sealed class TaskbarLyrics
         {"controlsIconColor","#F1F7F6"},
         {"controlsBackgroundColor","#202831"},
         {"controlsBackgroundOpacity",0},
+        {"controlsCornerRadius",6},
         {"buttonHoverBackground",false},
         {"buttonHoverColor","#304449"},
         {"buttonPressedBackground",false},
@@ -235,6 +245,7 @@ sealed class TaskbarLyrics
             // 嵌入 XAML，发布时无需额外 UI 文件或运行时安装。
             using (Stream stream = typeof(TaskbarLyrics).Assembly.GetManifestResourceStream("LyricsWindow.xaml"))
                 window = (UserControl)System.Windows.Markup.XamlReader.Load(stream);
+            spaceClip=(GeometryGroup)window.Resources["SpaceClip"];
             primary = (TextBlock)window.FindName("Primary");
             secondary = (TextBlock)window.FindName("Secondary");
             primaryViewport = (Grid)window.FindName("PrimaryViewport");
@@ -350,6 +361,10 @@ sealed class TaskbarLyrics
         CompositionTarget.Rendering+=RenderScroll;
         pointerTimer=new DispatcherTimer(DispatcherPriority.Input){Interval=TimeSpan.FromMilliseconds(30)};
         pointerTimer.Tick+=(sender,e)=>UpdateHover();pointerTimer.Start();
+        // 只在空位扩展等待时做一次布局确认，不周期扫描任务栏。
+        spaceLayoutTimer=new DispatcherTimer(DispatcherPriority.Render){Interval=TimeSpan.FromMilliseconds(16)};
+        spaceLayoutTimer.Tick+=(sender,e)=>{spaceLayoutTimer.Stop();RefreshSpace();};
+        taskbarSpace.Updated+=RefreshSpace;
         if(!embedded) {
             foregroundHook=SetWinEventHook(3,3,IntPtr.Zero,shellEvent,0,0,2);
             reorderHook=SetWinEventHook(0x8002,0x8004,IntPtr.Zero,shellEvent,0,0,2);
@@ -359,6 +374,7 @@ sealed class TaskbarLyrics
     {
         if(closed)return;
         closed=true;CancelScrub();CloseTrackNotice();pointerTimer.Stop();instances.Remove(this);
+        spaceLayoutTimer.Stop();taskbarSpace.Updated-=RefreshSpace;taskbarSpace.Dispose();latestFrame=null;
         CompositionTarget.Rendering-=RenderScroll;
         UnhookWinEvent(foregroundHook);UnhookWinEvent(reorderHook);
         // 在自身 UI 线程解挂后销毁，兼容父任务栏已销毁的情形。
@@ -370,7 +386,7 @@ sealed class TaskbarLyrics
                         return new {
                             text=primary.Text, secondary=secondary.Text, secondaryVisible=secondary.Visibility==Visibility.Visible,
                             fontSize=primary.FontSize, visualScale=VisualTreeHelper.GetDpi(primary).DpiScaleX, windowDpi=GetDpiForWindow(handle), screenScale=display.Scale, visible=IsWindowVisible(handle),
-                            taskbarDpi=GetDpiForWindow(display.Taskbar),layoutWidth=window.ActualWidth,layoutHeight=window.ActualHeight,
+                            taskbarDpi=GetDpiForWindow(display.Taskbar),layoutWidth=window.ActualWidth,layoutHeight=window.ActualHeight,spaceMode=allowDisplay?(lyricsAvailable?"lyrics":"cover"):"hidden",spaceScans=taskbarSpace.ScanCount,
                             primaryOffset=primaryShift.X, secondaryOffset=secondaryShift.X,
                             textWidth=double.IsNaN(primary.Width) ? 0 : primary.Width,
                             viewportWidth=double.IsNaN(primaryViewport.Width) ? 0 : primaryViewport.Width,
@@ -435,6 +451,23 @@ sealed class TaskbarLyrics
             SetProcessDpiAwareness(2);
             if(args.Length==1 && args[0]=="--raise-taskbar") {SetWindowPos(FindWindow("Shell_TrayWnd",null),new IntPtr(-1),0,0,0,0,0x13);return 0;}
             if(args.Length==2 && args[0]=="--screens") {File.WriteAllText(args[1],json.Serialize(Inventory(Screens())),Encoding.UTF8);return 0;}
+            if(args.Length==2 && args[0]=="--space-probe") {
+                // 只读取任务栏边界，不创建歌词宿主或改变任务栏排序。
+                var probe=Task.Run(()=>{
+                    var readings=new List<object>();
+                    foreach(var screen in Screens()){
+                        Rect bounds;if(!GetWindowRect(screen.Taskbar,out bounds))continue;
+                        var bar=new System.Windows.Rect(bounds.Left,bounds.Top,bounds.Width,bounds.Height);
+                        var preferred=Placement(bounds,screen.Scale,defaults);
+                        var snapshot=new TaskbarSpaceMonitor().Scan(screen.Taskbar,bar);
+                        var fit=TaskbarSpaceLayout.Resolve(bar,new System.Windows.Rect(preferred.Left,preferred.Top,preferred.Width,preferred.Height),snapshot.Valid?snapshot.Occupied:new[]{bar},screen.Scale,Convert.ToDouble(defaults["minimumControlsWidth"]),true);
+                        readings.Add(new{screen=screen.Info.Device,valid=snapshot.Valid,occupied=snapshot.Occupied,area=fit.Area,lyrics=fit.Lyrics,cover=fit.Cover,nativeTray=snapshot.NativeTray,overflowVisible=snapshot.OverflowVisible,tray=snapshot.TrayBounds.IsEmpty?new double[0]:new[]{snapshot.TrayBounds.Left,snapshot.TrayBounds.Top,snapshot.TrayBounds.Width,snapshot.TrayBounds.Height}});
+                    }
+                    return readings;
+                });
+                if(!probe.Wait(TimeSpan.FromSeconds(10)))return 3;
+                File.WriteAllText(args[1],json.Serialize(probe.Result),Encoding.UTF8);return 0;
+            }
             if(args.Length==2 && (args[0]=="--preview" || args[0]=="--probe")) {
                 var preview=new TaskbarLyrics(Screens()[0]);
                 if(args[0]=="--preview") preview.Preview(args[1]);else preview.Probe(args[1]);return 0;
@@ -446,7 +479,7 @@ sealed class TaskbarLyrics
             var surfaces=new Dictionary<string,TaskbarLyrics>();
             var clock=Stopwatch.StartNew();var reorderClock=new Stopwatch();bool polling=false,reordered=false;int failures=0;
             string inventory="";var screens=new List<Display>();DateTime checkedAt=DateTime.MinValue;
-            var timer=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(100)};
+            var timer=new DispatcherTimer {Interval=TimeSpan.FromMilliseconds(50)};
             timer.Tick+=async(sender,e)=>{
                 if(polling)return;polling=true;
                 try {
@@ -499,6 +532,7 @@ sealed class TaskbarLyrics
         if (message == 0x84) {
             // 封面、按钮与进度条接收点击，其余区域仍穿透到任务栏。
             var point=new Point(unchecked((short)(l.ToInt64()&0xffff)),unchecked((short)((l.ToInt64()>>16)&0xffff)));
+            if(!scrubbing && !InSpace(point)){handled=true;return new IntPtr(-1);}
             handled=true;return new IntPtr(scrubbing || (allowDisplay && InCover(point)) || (hovering && (InControls(point) || InProgress(point) || InNotice(point)))?1:-1);
         }
         return IntPtr.Zero;
@@ -584,12 +618,12 @@ sealed class TaskbarLyrics
     {
         // 从当前透明度开始反向过渡，快速移入移出不会闪跳。
         bool pointerInside=value;
-        value=value && (hoverEnabled || progressEnabled || hoverInfoEnabled);
+        value=value && lyricsAvailable && (hoverEnabled || progressEnabled || hoverInfoEnabled);
         double target=value?1:0;
         if(target!=hoverTarget){
             hoverFrom=hoverAmount;hoverTarget=target;hoverClock.Restart();if(value){infoClock.Restart();if(noticePointerOver)infoClock.Stop();}
         }
-        if(!allowDisplay){hoverAmount=hoverTarget=0;hoverClock.Reset();}
+        if(!allowDisplay || !lyricsAvailable){hoverAmount=hoverTarget=0;hoverClock.Reset();}
         hovering=value;
         if(!value)SetCoverHover(false);
         progressHost.Visibility=(value || hoverAmount>0) && progressEnabled?Visibility.Visible:Visibility.Collapsed;
@@ -651,29 +685,33 @@ sealed class TaskbarLyrics
         double progressHeight=progressHost.Visibility==Visibility.Visible?progressHost.Height:0;
         controlsViewport.MaxHeight=progressTimeViewport.MaxHeight=Math.Max(1,height-infoHeight-progressHeight);
         // 明确共用缩放尺寸；关闭的按钮仍可测量宽度，但该行高度为零。
-        double buttonScale=Math.Min(1,Math.Min(Math.Max(1,controlsViewport.MaxWidth-6)/144,controlsViewport.MaxHeight/24));
+        double buttonScale=Math.Min(1,controlsViewport.MaxHeight/24);
         controlsViewport.Width=progressTimeViewport.Width=144*buttonScale;
         controlsViewport.Height=progressTimeViewport.Height=24*buttonScale;
         infoRow.Height=new GridLength(infoHeight);
         controlsRow.Height=new GridLength(active && (hoverEnabled || progressHovered)?24*buttonScale:0);
         progressRow.Height=new GridLength(progressHeight);
         interactionHost.Height=infoRow.Height.Value+controlsRow.Height.Value+progressRow.Height.Value;
-        double available=Math.Max(1,Math.Min(controlsViewport.MaxWidth,Math.Max(1,lyricsHost.ActualWidth)));
         // 与按钮同一中心；窄区域会整体缩小，文字宽度不影响按钮尺寸。
         double center=controlsSurface.ActualWidth>0 && controlsViewport.Visibility!=Visibility.Collapsed?controlsSurface.TransformToAncestor(lyricsHost).Transform(new Point(controlsSurface.ActualWidth/2,0)).X:controlsAnchor.Margin.Left+controlsAnchor.ActualWidth/2;
-        double buttonsWidth=controlsSurface.TransformToAncestor(lyricsHost).Transform(new Point(controlsSurface.ActualWidth,0)).X-controlsSurface.TransformToAncestor(lyricsHost).Transform(new Point(0,0)).X;
-        double width=Math.Max(1,Math.Min(buttonsWidth,Math.Min(available,2*Math.Min(center,Math.Max(0,available-center)))));
+        double buttonsWidth=controlsSurface.ActualWidth>0?controlsSurface.TransformToAncestor(lyricsHost).Transform(new Point(controlsSurface.ActualWidth,0)).X-controlsSurface.TransformToAncestor(lyricsHost).Transform(new Point(0,0)).X:144*buttonScale;
         double naturalHeight=Math.Max(1,noticeLine.ActualHeight>0?noticeLine.ActualHeight:noticeTitle.FontFamily.LineSpacing*noticeTitle.FontSize);
-        double scale=Math.Min(1,noticeViewport.MaxHeight/naturalHeight),layoutWidth=width/scale;
+        // 歌曲信息、按钮和进度条共用同一渲染宽度。
+        double width=Math.Max(1,buttonsWidth),scale=Math.Min(1,noticeViewport.MaxHeight/naturalHeight),layoutWidth=width/scale;
         if(Math.Abs(trackNoticeSurface.Width-layoutWidth)>.01){trackNoticeSurface.Width=layoutWidth;noticeMeasurePending=true;}
-        noticeViewport.MaxWidth=width;
-        noticeViewport.Margin=new Thickness(Math.Max(0,center-width/2),0,0,0);
+        noticeViewport.Width=noticeViewport.MaxWidth=width;
+        noticeViewport.Height=infoHeight;
+        noticeViewport.Margin=new Thickness(center-width/2,0,0,0);
     }
     bool InCover(Point screen)
     {
         if(!coverEnabled || coverHost.Visibility!=Visibility.Visible)return false;
         Point first=coverHost.PointToScreen(new Point(0,0)),last=coverHost.PointToScreen(new Point(coverHost.ActualWidth,coverHost.ActualHeight));
         return new System.Windows.Rect(first,last).Contains(screen);
+    }
+    bool InSpace(Point screen)
+    {
+        return !spaceClipActive || spaceClip.FillContains(window.PointFromScreen(screen));
     }
     void UpdateHover()
     {
@@ -686,7 +724,7 @@ sealed class TaskbarLyrics
             GetWindowRect(handle,out bounds);
             IntPtr hit=WindowFromPoint(point),bar=display.Taskbar;
             var name=new StringBuilder(256);if(bar==IntPtr.Zero)GetClassName(hit,name,name.Capacity);
-            inside=point.X>=bounds.Left && point.X<bounds.Right && point.Y>=bounds.Top && point.Y<bounds.Bottom &&
+            inside=point.X>=bounds.Left && point.X<bounds.Right && point.Y>=bounds.Top && point.Y<bounds.Bottom && InSpace(new Point(point.X,point.Y)) &&
                 (hit==handle || hit==bar || (bar!=IntPtr.Zero && (IsChild(bar,hit) || GetAncestor(hit,2)==bar)) || (bar==IntPtr.Zero && (name.ToString()=="Progman" || name.ToString()=="WorkerW")));
         }
         SetCoverHover(inside && InCover(new Point(point.X,point.Y)));
@@ -1023,6 +1061,27 @@ sealed class TaskbarLyrics
 
     void Apply(Dictionary<string,object> frame)
     {
+        latestFrame=frame;ApplyFrame(frame,true);
+    }
+    void RefreshSpace()
+    {
+        if(!closed && latestFrame!=null)ApplyFrame(latestFrame,false);
+    }
+    void ClipSpace(System.Windows.Rect area,System.Windows.Rect bar,System.Windows.Rect[] occupied,double scale)
+    {
+        var physical=TaskbarSpaceLayout.VisibleParts(area,bar,occupied,scale);
+        var parts=new System.Windows.Rect[physical.Length];bool changed=!spaceClipActive || parts.Length!=spaceClipParts.Length;
+        for(int i=0;i<parts.Length;i++){
+            parts[i]=new System.Windows.Rect((physical[i].Left-area.Left)/scale,(physical[i].Top-area.Top)/scale,physical[i].Width/scale,physical[i].Height/scale);
+            if(!changed && parts[i]!=spaceClipParts[i])changed=true;
+        }
+        if(!changed)return;
+        // 只改变绘制与命中范围，不改窗口位置、字号或悬浮控件尺寸。
+        spaceClip.Children.Clear();foreach(var part in parts)spaceClip.Children.Add(new RectangleGeometry(part));
+        window.Clip=spaceClip;spaceClipParts=parts;spaceClipActive=true;
+    }
+    void ApplyFrame(Dictionary<string,object> frame,bool playbackFrame)
+    {
         if(closed || NeedsRebuild(display))return;
         // 辅助程序先更新、播放器尚未重载时，也兼容旧版配置快照。
         var s=new Dictionary<string,object>(defaults);
@@ -1047,17 +1106,35 @@ sealed class TaskbarLyrics
             (Convert.ToBoolean(s["hideFullscreen"]) && Fullscreen(taskbar));
         allowDisplay=!hide;
         if (hide) { CancelScrub();CloseTrackNotice();SetHover(false);ShowWindow(handle,0); return; }
-        OwnTaskbar(taskbar);
         Rect area=Placement(bar,scale,s);
+        var barBounds=new System.Windows.Rect(bar.Left,bar.Top,bar.Width,bar.Height);
+        var preferred=new System.Windows.Rect(area.Left,area.Top,area.Width,area.Height);
+        var occupancy=taskbarSpace.Read(taskbar,barBounds);
+        double minimumControlsWidth=Math.Max(0,Math.Min(900,Convert.ToDouble(s["minimumControlsWidth"])));
+        bool wantsCover=Convert.ToBoolean(s["showCover"]);
+        var fit=occupancy.Valid?TaskbarSpaceLayout.Resolve(barBounds,preferred,occupancy.Occupied,scale,minimumControlsWidth,wantsCover):new TaskbarSpacePlacement {Area=new System.Windows.Rect(area.Left,area.Top,0,area.Height)};
+        // 测量可以跟进动画，窗口只采用已连续确认的边界。
+        taskbarSpaceStability.Confirmed=taskbar==IntPtr.Zero || taskbarSpace.PlacementReady;
+        var stable=taskbarSpaceStability.ConstrainInSpace(fit.Area,DateTime.UtcNow,barBounds,occupancy.Occupied,scale);
+        if(taskbarSpaceStability.Waiting && !spaceLayoutTimer.IsEnabled)spaceLayoutTimer.Start();
+        fit=TaskbarSpaceLayout.Resolve(stable,stable,new System.Windows.Rect[0],scale,minimumControlsWidth,wantsCover);
+        lyricsAvailable=fit.Lyrics;
+        if(fit.Area.Width<=0){allowDisplay=false;CancelScrub();CloseTrackNotice();SetHover(false);ShowWindow(handle,0);return;}
+        area=new Rect {Left=(int)Math.Ceiling(fit.Area.Left),Top=(int)Math.Ceiling(fit.Area.Top),Right=(int)Math.Floor(fit.Area.Right),Bottom=(int)Math.Floor(fit.Area.Bottom)};
+        ClipSpace(new System.Windows.Rect(area.Left,area.Top,area.Width,area.Height),barBounds,occupancy.Occupied,scale);
+        // 所有绘制和鼠标命中均限制在空位内，封面模式不弹出悬浮控件。
+        lyricsHost.Visibility=lyricsAvailable?Visibility.Visible:Visibility.Collapsed;
+        if(!lyricsAvailable){CancelScrub();CloseTrackNotice();}
+        OwnTaskbar(taskbar);
         // WPF 使用逻辑像素，偏移自动适配每块屏幕的 DPI。
         verticalShift.Y=s.ContainsKey("verticalOffset")?Math.Max(-20,Math.Min(20,Convert.ToDouble(s["verticalOffset"]))):0;
         if(nextTrack!=controlTrackId){CancelScrub();pendingSeekMs=-1;}
         controlTrackId=nextTrack;hasControlTrack=controlTrackId!="";
         durationMs=frame.ContainsKey("durationMs")?Convert.ToDouble(frame["durationMs"]):0;
         if(double.IsNaN(durationMs) || double.IsInfinity(durationMs) || durationMs<0)durationMs=0;
-        progressEnabled=s.ContainsKey("hoverProgress") && Convert.ToBoolean(s["hoverProgress"]) && durationMs>0 && hasControlTrack;
-        hoverEnabled=s.ContainsKey("hoverControls") && Convert.ToBoolean(s["hoverControls"]);
-        hoverInfoEnabled=Convert.ToBoolean(s["hoverSongInfo"]);
+        progressEnabled=lyricsAvailable && s.ContainsKey("hoverProgress") && Convert.ToBoolean(s["hoverProgress"]) && durationMs>0 && hasControlTrack;
+        hoverEnabled=lyricsAvailable && s.ContainsKey("hoverControls") && Convert.ToBoolean(s["hoverControls"]);
+        hoverInfoEnabled=lyricsAvailable && Convert.ToBoolean(s["hoverSongInfo"]);
         if(!progressEnabled)CancelScrub();
         SetHover(hovering);
         primary.FontFamily=secondary.FontFamily=new FontFamily(Convert.ToString(frame["fontFamily"]));
@@ -1069,7 +1146,7 @@ sealed class TaskbarLyrics
         favorite=frame.ContainsKey("isFavorite") && Convert.ToBoolean(frame["isFavorite"]);
         frameBusy=frame.ContainsKey("commandBusy") && Convert.ToBoolean(frame["commandBusy"]);
         frameLoading=frame.ContainsKey("loading") && Convert.ToBoolean(frame["loading"]);
-        coverEnabled=s.ContainsKey("showCover") && Convert.ToBoolean(s["showCover"]);
+        coverEnabled=fit.Cover;
         if(!coverEnabled)SetCoverHover(false);
         noticeArtists.Clear();
         if(frame.ContainsKey("navigation")) {
@@ -1083,7 +1160,7 @@ sealed class TaskbarLyrics
         StyleNotice(s,frame);
         bool circle=s.ContainsKey("coverShape") && Convert.ToString(s["coverShape"])=="circle";
         coverSpinning=coverEnabled && circle && s.ContainsKey("rotateCover") && Convert.ToBoolean(s["rotateCover"]);
-        coverTimeMs=frame.ContainsKey("coverTimeMs")?Convert.ToDouble(frame["coverTimeMs"]):Convert.ToDouble(frame["timelineMs"]);
+        if(playbackFrame)coverTimeMs=frame.ContainsKey("coverTimeMs")?Convert.ToDouble(frame["coverTimeMs"]):Convert.ToDouble(frame["timelineMs"]);
         double coverSize=Math.Min(36,Math.Max(16,area.Height/scale-10));
         coverHost.Width=coverHost.Height=coverSize;coverHost.Visibility=coverEnabled?Visibility.Visible:Visibility.Collapsed;
         coverRectangle.Rect=new System.Windows.Rect(0,0,coverSize,coverSize);
@@ -1109,6 +1186,8 @@ sealed class TaskbarLyrics
         secondaryMasking=masking && Convert.ToString(s["layout"])=="double" && Convert.ToString(s["secondary"])=="translation";
         UpdateStops(primary,frame["characters"],ref primaryProfileKey,ref primaryStops);
         UpdateStops(secondary,frame["secondaryCharacters"],ref secondaryProfileKey,ref secondaryStops);
+        // 空位事件只重排显示，不能重置正在推进的歌词与封面时钟。
+        if(playbackFrame){
         timelineMs=Convert.ToDouble(frame["timelineMs"]);
         lineStartMs=Convert.ToDouble(frame["lineStartMs"]);
         lineEndMs=Convert.ToDouble(frame["lineEndMs"]);
@@ -1119,6 +1198,7 @@ sealed class TaskbarLyrics
         // 暂停或缓冲时停止计时，恢复只从新的宿主锚点开始。
         if(clockAdvancing)lyricClock.Restart();else lyricClock.Reset();
         UpdateLyricTransition(frame,s,nextTrack);
+        }
         RenderScroll(null,EventArgs.Empty);
         Rect actual;GetWindowRect(handle,out actual);
         // WPF 切换 DPI 会调整窗口尺寸，按实际边界校正，避免沿用旧屏幕尺寸。
@@ -1140,6 +1220,7 @@ sealed class TaskbarLyrics
         secondary.Visibility=dualLyrics ? Visibility.Visible : Visibility.Collapsed;
         secondaryViewport.Visibility=secondary.Visibility;
         window.Opacity=Convert.ToDouble(s["opacity"])/100;
+        window.Resources["ControlCornerRadius"]=new CornerRadius(Math.Max(0,Math.Min(12,Convert.ToDouble(s["controlsCornerRadius"]))));
         // 抵消整体透明度，避免点击底层被舍入成完全透明的像素。
         var hitBackground=(SolidColorBrush)window.Resources["ButtonHitBackground"];
         byte hitAlpha=(byte)Math.Min(255,Math.Ceiling(1/Math.Max(1.0/255,window.Opacity)));
