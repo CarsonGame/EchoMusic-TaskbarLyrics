@@ -21,6 +21,57 @@ class TaskbarSpaceHarness
     static void Check(bool value,string message){checks++;if(!value)throw new Exception(message);}
     static object Resolve(Rect bar,Rect preferred,Rect[] blocked,double scale,double minimum,bool cover){return assembly.GetType("TaskbarSpaceLayout").GetMethod("Resolve",flags).Invoke(null,new object[]{bar,preferred,blocked,scale,minimum,cover});}
     static Rect Area(object fit){return (Rect)Field(fit,"Area");}
+    static object Aligned(Rect bar,Rect preferred,Rect[] blocked,double scale,double minimum,bool cover,string alignment){return assembly.GetType("TaskbarSpaceLayout").GetMethod("ResolveAligned",flags).Invoke(null,new object[]{bar,preferred,blocked,scale,minimum,cover,alignment});}
+    static Rect Preferred(Rect bar,double scale,string alignment,double offset,double width)
+    {
+        Type native=assembly.GetType("TaskbarLyrics");object bounds=Activator.CreateInstance(native.GetNestedType("Rect",flags));
+        Set(bounds,"Left",(int)bar.Left);Set(bounds,"Top",(int)bar.Top);Set(bounds,"Right",(int)bar.Right);Set(bounds,"Bottom",(int)bar.Bottom);
+        var settings=new Dictionary<string,object>{{"placementAlignment",alignment},{"offset",offset},{"width",width}};
+        object placed=native.GetMethod("Placement",flags).Invoke(null,new object[]{bounds,scale,settings});
+        return new Rect((int)Field(placed,"Left"),(int)Field(placed,"Top"),(int)Field(placed,"Right")-(int)Field(placed,"Left"),(int)Field(placed,"Bottom")-(int)Field(placed,"Top"));
+    }
+    static void Alignment()
+    {
+        Rect bar=new Rect(0,0,1000,48),middle=new Rect(320,0,360,48),right=new Rect(628,0,360,48);
+        Check(Preferred(bar,1,"left",12,360)==new Rect(12,0,360,48),"旧版左侧距离改变");
+        Check(Preferred(bar,1,"center",0,360)==middle,"居中初始位置错误");
+        Check(Preferred(bar,1,"right",12,360)==right,"居右初始偏移错误");
+        foreach(double scale in new[]{1.0,1.25,1.5,2.0})foreach(double origin in new[]{0.0,-2560.0})foreach(string alignment in new[]{"left","center","right"})foreach(double offset in new[]{-2000.0,-20,0,12,2000}){
+            Rect bounds=new Rect(origin,-100,1000*scale,48*scale);
+            Rect wanted=Preferred(bounds,scale,alignment,offset,360);
+            Check(bounds.Contains(wanted),"偏移或缩放导致初始区域越出屏幕");
+            Check(wanted.Width<=360*scale,"偏移放大了最大显示宽度");
+            if(alignment=="center" && offset==-20)Check(Math.Abs(wanted.Left+wanted.Width/2-(bounds.Left+bounds.Width/2-20*scale))<.51,"居中负偏移没有按各屏 DPI 换算");
+            Check(bounds.Contains(Preferred(bounds,scale,alignment,offset,2000)),"大宽度或极端偏移越界");
+        }
+        Check(Area(Aligned(bar,middle,new Rect[0],1,90,true,"center"))==middle,"居中没有保持任务栏中心");
+        Rect shifted=Area(Aligned(bar,middle,new[]{new Rect(440,0,160,48)},1,90,true,"center"));
+        Check(shifted.Left==604 && shifted.Width==360,"中心被占用后没有向右寻找空位");
+        Check(Area(Aligned(bar,middle,new[]{new Rect(440,0,160,48),new Rect(860,0,140,48)},1,90,true,"center")).Right==856,"向右避让后没有收缩宽度");
+        var cover=Aligned(bar,middle,new[]{new Rect(0,0,800,48),new Rect(900,0,100,48)},1,90,true,"center");
+        Check((bool)Field(cover,"Cover") && !(bool)Field(cover,"Lyrics"),"中心向右无控件空间时未保留封面");
+        Check(Area(Aligned(bar,middle,new[]{new Rect(480,0,520,48)},1,90,true,"center")).Width==0,"居中向右无空间时跳回了左侧");
+        Check(Area(Aligned(bar,right,new Rect[0],1,90,true,"right"))==right,"居右没有保留边缘偏移");
+        Rect shrunk=Area(Aligned(bar,right,new[]{new Rect(0,0,780,48)},1,90,true,"right"));
+        Check(shrunk.Left==784 && shrunk.Right==988,"居右收缩后右边缘漂移");
+        Check(Area(Aligned(bar,right,new[]{new Rect(800,0,200,48)},1,90,true,"right")).Right==796,"居右未向左避让托盘");
+        var stability=Activator.CreateInstance(assembly.GetType("TaskbarSpaceStability"),true);
+        Call(stability,"Constrain",middle,DateTime.UtcNow);Call(stability,"Reset");
+        Check((Rect)Call(stability,"Constrain",right,DateTime.UtcNow)==right,"切换对齐后仍沿用旧位置");
+        // 覆盖负坐标、副屏 DPI、窄空位及两端占用，所有方向都不能越界。
+        foreach(string alignment in new[]{"left","center","right"})foreach(double scale in new[]{1.0,1.25,1.5,2.0})foreach(double left in new[]{0.0,-2560.0})foreach(int boundary in new[]{40,300,600,800,950})foreach(bool showCover in new[]{true,false}){
+            Rect bounds=new Rect(left,-100,1000*scale,48*scale);
+            double x=alignment=="left"?12:alignment=="center"?320:628;
+            Rect wanted=new Rect(left+x*scale,-100,360*scale,48*scale);
+            Rect[] blocked={new Rect(left,-100,boundary*scale,48*scale),new Rect(left+940*scale,-100,60*scale,48*scale)};
+            var fit=Aligned(bounds,wanted,blocked,scale,90,showCover,alignment);Rect area=Area(fit);
+            if(area.Width<=0)continue;
+            Check((bool)assembly.GetType("TaskbarSpaceLayout").GetMethod("IsFree",flags).Invoke(null,new object[]{area,bounds,blocked,scale}),"对齐后的内容遮挡图标或越过屏幕");
+            if(alignment=="right")Check(area.Right<=wanted.Right,"居右偏移边界失效");
+            if(alignment=="center")Check(area.Left+area.Width/2>=wanted.Left+wanted.Width/2-.51,"居中避让时向左跳动");
+            if((bool)Field(fit,"Lyrics"))Check(area.Width/scale-(showCover?44:0)-8>=89.99,"对齐后未遵守控件最小宽度");
+        }
+    }
     static void Geometry()
     {
         var bar=new Rect(0,0,1000,48);var preferred=new Rect(12,0,360,48);
@@ -109,6 +160,64 @@ class TaskbarSpaceHarness
             Set(surface,"lyricsAvailable",false);Set(surface,"hoverAmount",1.0);Call(surface,"SetHover",true);
             Check(!(bool)Field(surface,"hovering") && (double)Field(surface,"hoverAmount")==0,"仅封面时悬停仍展开控件");
             var root=(System.Windows.Controls.UserControl)Field(surface,"window");
+            var coverHost=(Grid)Field(surface,"coverHost");var lyricsHost=(Grid)Field(surface,"lyricsHost");
+            coverHost.Visibility=lyricsHost.Visibility=Visibility.Visible;
+            foreach(string alignment in new[]{"right","left","center","right"}){
+                Call(surface,"LayoutOrder",alignment);
+                root.Measure(new Size(300,48));root.Arrange(new Rect(0,0,300,48));root.UpdateLayout();
+                double coverX=coverHost.TransformToAncestor(root).Transform(new Point()).X;
+                double lyricX=lyricsHost.TransformToAncestor(root).Transform(new Point()).X;
+                Check(alignment=="right"?coverX>lyricX:coverX<lyricX,"切换整体位置后封面顺序错误");
+                Check(coverHost.ActualWidth==36 && lyricsHost.ActualWidth==256,"交换列改变了封面或歌词区域尺寸");
+            }
+            var primary=(TextBlock)Field(surface,"primary");var secondary=(TextBlock)Field(surface,"secondary");
+            var primaryViewport=(Grid)Field(surface,"primaryViewport");var secondaryViewport=(Grid)Field(surface,"secondaryViewport");
+            primaryViewport.Width=secondaryViewport.Width=248;
+            secondary.Visibility=secondaryViewport.Visibility=Visibility.Visible;
+            Set(surface,"scrolling",true);Set(surface,"scrollingTranslation",true);
+            foreach(string alignment in new[]{"right","left","center"})foreach(string lyric in new[]{"短歌词","这是非常长的一段歌词需要从头正常滚动而且必须能看到最后的文字"}){
+                Call(surface,"LayoutOrder",alignment);primary.Text=lyric;secondary.Text="下一句";
+                Set(surface,"primaryTextWidth",Call(surface,"FitLine",primary,248.0,true));Set(surface,"secondaryTextWidth",Call(surface,"FitLine",secondary,248.0,true));Call(surface,"AlignLyrics");
+                root.Measure(new Size(300,48));root.Arrange(new Rect(0,0,300,48));root.UpdateLayout();
+                bool rightShort=alignment=="right" && primary.Width<=248;
+                Check(primary.HorizontalAlignment==(rightShort?HorizontalAlignment.Right:HorizontalAlignment.Left),"短歌词未靠近封面，或长歌词起点被裁切");
+                if(rightShort){
+                    double end=primary.TransformToAncestor(root).Transform(new Point(primary.ActualWidth,0)).X;
+                    double coverX=coverHost.TransformToAncestor(root).Transform(new Point()).X;
+                    Check(Math.Abs(coverX-end-8)<.51,"居右短歌词与封面间残留整块空白");
+                }
+                Check(secondary.HorizontalAlignment==(alignment=="right"?HorizontalAlignment.Right:HorizontalAlignment.Left),"第二行没有同步靠近封面");
+            }
+            Call(surface,"LayoutOrder","right");primary.Text="不滚动的短句";
+            Set(surface,"primaryTextWidth",Call(surface,"FitLine",primary,248.0,false));Set(surface,"scrolling",false);Call(surface,"AlignLyrics");
+            Check(primary.TextAlignment==TextAlignment.Right,"关闭滚动后短句仍靠左");
+            Check(Math.Abs(primary.Width-(double)Field(surface,"primaryTextWidth"))<.01,"居右短句字框留白错开进度遮罩坐标");
+            var controlsSurface=(Border)Field(surface,"controlsSurface");
+            var timeViewport=(Viewbox)Field(surface,"progressTimeViewport");
+            viewport.Visibility=timeViewport.Visibility=Visibility.Visible;viewport.MaxWidth=248;
+            foreach(string placement in new[]{"left","center","right"})foreach(string lyric in new[]{"短句","这是一段长度超过控件宽度的歌词，用于验证控件不会远离封面"}){
+                Set(surface,"hovering",false);Call(surface,"LayoutOrder",placement);
+                primary.Text=lyric;Set(surface,"primaryTextWidth",Call(surface,"FitLine",primary,248.0,true));Call(surface,"AlignLyrics");
+                Call(surface,"LayoutControls",248.0);
+                root.Measure(new Size(300,48));root.Arrange(new Rect(0,0,300,48));root.UpdateLayout();
+                double first=controlsSurface.TransformToAncestor(root).Transform(new Point()).X;
+                double last=controlsSurface.TransformToAncestor(root).Transform(new Point(controlsSurface.ActualWidth,0)).X;
+                var expected=placement=="right"?HorizontalAlignment.Right:HorizontalAlignment.Left;
+                Check(viewport.HorizontalAlignment==expected && timeViewport.HorizontalAlignment==expected,"按钮和播放时间未随封面方向同步对齐");
+                double coverX=coverHost.TransformToAncestor(root).Transform(new Point()).X;
+                double gap=placement=="right"?coverX-last:first-coverX-coverHost.ActualWidth;
+                Check(Math.Abs(gap-11)<.51,"边缘对齐的控件被歌词留白推离封面");
+                double before=first;
+                Set(surface,"hovering",true);primary.Text="另一句";Call(surface,"LayoutControls",248.0);
+                root.Measure(new Size(300,48));root.Arrange(new Rect(0,0,300,48));root.UpdateLayout();
+                Check(Math.Abs(controlsSurface.TransformToAncestor(root).Transform(new Point()).X-before)<.51,"悬停中换句使控件横向跳动");
+                Check(last<=lyricsHost.TransformToAncestor(root).Transform(new Point(lyricsHost.ActualWidth,0)).X,"控件遮挡封面或越出歌词区域");
+            }
+            Call(surface,"LayoutOrder","right");
+            lyricsHost.Visibility=Visibility.Collapsed;
+            root.Measure(new Size(44,48));root.Arrange(new Rect(0,0,44,48));root.UpdateLayout();
+            Check(Math.Abs(coverHost.TransformToAncestor(root).Transform(new Point()).X-4)<.01,"居右仅封面模式超出显示范围");
+            lyricsHost.Visibility=Visibility.Visible;Call(surface,"LayoutOrder","left");
             root.Measure(new Size(300,48));root.Arrange(new Rect(0,0,300,48));
             Call(surface,"ClipSpace",new Rect(0,0,300,48),new Rect(0,0,1000,48),new[]{new Rect(120,0,100,48)},1.0);
             var clip=(System.Windows.Media.GeometryGroup)root.Clip;
@@ -318,7 +427,7 @@ class TaskbarSpaceHarness
     }
     [STAThread] static int Main(string[] args)
     {
-        try {assembly=Assembly.LoadFrom(args[0]);Geometry();Stability();Interaction();Events();TrayChanges();AnimationCommit();ContinuousDisplay();File.WriteAllText(args[1],new JavaScriptSerializer().Serialize(new{passed=true,checks=checks}));return 0;}
+        try {assembly=Assembly.LoadFrom(args[0]);Geometry();Alignment();Stability();Interaction();Events();TrayChanges();AnimationCommit();ContinuousDisplay();File.WriteAllText(args[1],new JavaScriptSerializer().Serialize(new{passed=true,checks=checks}));return 0;}
         catch(Exception error){File.WriteAllText(args[1]+".error",error.ToString());return 1;}
     }
 }

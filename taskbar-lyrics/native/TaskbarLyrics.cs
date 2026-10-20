@@ -31,9 +31,12 @@ sealed class TaskbarLyrics
     Display display;
     readonly TaskbarSpaceMonitor taskbarSpace=new TaskbarSpaceMonitor();
     readonly TaskbarSpaceStability taskbarSpaceStability=new TaskbarSpaceStability();
+    string placementSettingsKey="";
+    ColumnDefinition leadingColumn,trailingColumn;
     Dictionary<string,object> latestFrame;
     DispatcherTimer spaceLayoutTimer;
     bool lyricsAvailable=true;
+    bool lyricsRightAligned;
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string name, string title);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string cls,string title);
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW",SetLastError=true)] static extern IntPtr SetWindowLongPtr(IntPtr hwnd,int index,IntPtr value);
@@ -116,7 +119,6 @@ sealed class TaskbarLyrics
     DispatcherTimer pointerTimer;
     bool hovering,hoverEnabled,coverEnabled,coverSpinning,closed,frameBusy,hasControlTrack,favorite;
     string controlTrackId="",coverKey="";
-    string controlsAlignment="center";
     double coverTimeMs;
     Grid progressHost,progressTrack;
     Border progressFill,progressBed;
@@ -203,6 +205,7 @@ sealed class TaskbarLyrics
         {"buttonPressedColor","#3B585C"},
         {"progressMask",true},
         {"offset",12},
+        {"placementAlignment","left"},
         {"verticalOffset",2},
         {"opacity",100},
         {"theme","custom"},
@@ -210,7 +213,6 @@ sealed class TaskbarLyrics
         {"hideFullscreen",true},
         {"scrollLyrics",true},
         {"hoverControls",true},
-        {"controlsAlignment","left"},
         {"showCover",true},
         {"coverShape","rectangle"},
         {"rotateCover",false},
@@ -260,6 +262,7 @@ sealed class TaskbarLyrics
             coverButton=(Button)window.FindName("CoverButton");
             coverButton.Click+=(sender,e)=>ShowMainWindow();
             lyricsHost=(Grid)window.FindName("LyricsHost");lyricsText=(StackPanel)window.FindName("LyricsText");
+            leadingColumn=(ColumnDefinition)window.FindName("LeadingColumn");trailingColumn=(ColumnDefinition)window.FindName("TrailingColumn");
             lyricTransitionShift=(TranslateTransform)window.FindName("LyricTransitionShift");
             lyricTransitionScale=(ScaleTransform)window.FindName("LyricTransitionScale");
             lyricTransitionReveal=(LinearGradientBrush)window.FindName("LyricTransitionReveal");
@@ -1051,12 +1054,34 @@ sealed class TaskbarLyrics
     {
         // 以物理像素定位，再按当前任务栏 DPI 换算用户设置。
         bool horizontal=bar.Width >= bar.Height;
+        string alignment=Convert.ToString(s["placementAlignment"]);
+        if(!horizontal)alignment="left";
         int offset=(int)Math.Round(Convert.ToDouble(s["offset"])*scale);
         int available=horizontal ? bar.Width : bar.Height;
-        offset=Math.Min(Math.Max(0,offset),Math.Max(0,available-40));
-        int width=horizontal ? Math.Min((int)Math.Round(Convert.ToDouble(s["width"])*scale),available-offset) : bar.Width;
+        offset=Math.Min(Math.Max(alignment=="center"?-available:0,offset),Math.Max(0,available-40));
+        int width=horizontal ? Math.Min((int)Math.Round(Convert.ToDouble(s["width"])*scale),available-(alignment=="center"?0:offset)) : bar.Width;
         int height=horizontal ? bar.Height : Math.Min((int)(48*scale),bar.Height-offset);
-        return new Rect { Left=bar.Left+(horizontal?offset:0), Top=bar.Top+(horizontal?0:offset), Right=bar.Left+(horizontal?offset:0)+width, Bottom=bar.Top+(horizontal?0:offset)+height };
+        int x=alignment=="right"?bar.Right-offset-width:alignment=="center"?Math.Max(bar.Left,Math.Min(bar.Right-width,bar.Left+(available-width)/2+offset)):bar.Left+offset;
+        return new Rect { Left=horizontal?x:bar.Left, Top=bar.Top+(horizontal?0:Math.Max(0,offset)), Right=(horizontal?x:bar.Left)+width, Bottom=bar.Top+(horizontal?0:Math.Max(0,offset))+height };
+    }
+
+    void LayoutOrder(string alignment)
+    {
+        // 交换列而非镜像 UI，文字、图标和进度方向保持正常。
+        bool coverRight=alignment=="right";
+        lyricsRightAligned=coverRight;
+        Grid.SetColumn(coverHost,coverRight?1:0);Grid.SetColumn(lyricsHost,coverRight?0:1);
+        leadingColumn.Width=coverRight?new GridLength(1,GridUnitType.Star):GridLength.Auto;
+        trailingColumn.Width=coverRight?GridLength.Auto:new GridLength(1,GridUnitType.Star);
+    }
+
+    void LayoutControls(double contentWidth)
+    {
+        var anchorAlignment=lyricsRightAligned?HorizontalAlignment.Right:HorizontalAlignment.Left;
+        controlsAnchor.HorizontalAlignment=anchorAlignment;
+        controlsAnchor.Width=contentWidth;
+        // 边缘对齐始终贴近封面；仅改变布局，不翻转按钮或进度方向。
+        controlsViewport.HorizontalAlignment=progressTimeViewport.HorizontalAlignment=anchorAlignment;
     }
 
     void Apply(Dictionary<string,object> frame)
@@ -1112,7 +1137,11 @@ sealed class TaskbarLyrics
         var occupancy=taskbarSpace.Read(taskbar,barBounds);
         double minimumControlsWidth=Math.Max(0,Math.Min(900,Convert.ToDouble(s["minimumControlsWidth"])));
         bool wantsCover=Convert.ToBoolean(s["showCover"]);
-        var fit=occupancy.Valid?TaskbarSpaceLayout.Resolve(barBounds,preferred,occupancy.Occupied,scale,minimumControlsWidth,wantsCover):new TaskbarSpacePlacement {Area=new System.Windows.Rect(area.Left,area.Top,0,area.Height)};
+        string placementAlignment=Convert.ToString(s["placementAlignment"]);
+        string placementKey=placementAlignment+":"+s["offset"]+":"+s["width"]+":"+minimumControlsWidth+":"+wantsCover;
+        bool placementChanged=placementKey!=placementSettingsKey;
+        if(placementChanged){taskbarSpaceStability.Reset();placementSettingsKey=placementKey;}
+        var fit=occupancy.Valid?TaskbarSpaceLayout.ResolveAligned(barBounds,preferred,occupancy.Occupied,scale,minimumControlsWidth,wantsCover,placementAlignment):new TaskbarSpacePlacement {Area=new System.Windows.Rect(area.Left,area.Top,0,area.Height)};
         // 测量可以跟进动画，窗口只采用已连续确认的边界。
         taskbarSpaceStability.Confirmed=taskbar==IntPtr.Zero || taskbarSpace.PlacementReady;
         var stable=taskbarSpaceStability.ConstrainInSpace(fit.Area,DateTime.UtcNow,barBounds,occupancy.Occupied,scale);
@@ -1124,6 +1153,7 @@ sealed class TaskbarLyrics
         ClipSpace(new System.Windows.Rect(area.Left,area.Top,area.Width,area.Height),barBounds,occupancy.Occupied,scale);
         // 所有绘制和鼠标命中均限制在空位内，封面模式不弹出悬浮控件。
         lyricsHost.Visibility=lyricsAvailable?Visibility.Visible:Visibility.Collapsed;
+        LayoutOrder(placementAlignment);
         if(!lyricsAvailable){CancelScrub();CloseTrackNotice();}
         OwnTaskbar(taskbar);
         // WPF 使用逻辑像素，偏移自动适配每块屏幕的 DPI。
@@ -1174,14 +1204,9 @@ sealed class TaskbarLyrics
         scrollingTranslation=scrolling && Convert.ToString(s["secondary"]) == "translation";
         primaryTextWidth=FitLine(primary,primaryViewport.Width,scrolling);
         secondaryTextWidth=FitLine(secondary,secondaryViewport.Width,scrollingTranslation);
-        // 只按文字改变位置；为按钮保留宽度，短句不会触发缩放。
-        double visibleTextWidth=Math.Min(contentWidth,Math.Max(primaryTextWidth,secondaryViewport.Visibility==Visibility.Visible?secondaryTextWidth:0));
-        string alignment=s.ContainsKey("controlsAlignment") && Convert.ToString(s["controlsAlignment"])=="left"?"left":"center";
-        double buttonsWidth=controlsSurface.Width+controlsViewport.Margin.Left+controlsViewport.Margin.Right;
-        double anchorWidth=alignment=="center"?Math.Min(contentWidth,Math.Max(visibleTextWidth,buttonsWidth)):contentWidth;
-        controlsAnchor.Width=hovering && alignment==controlsAlignment?Math.Min(controlsAnchor.Width,contentWidth):anchorWidth;
-        controlsAlignment=alignment;
-        controlsViewport.HorizontalAlignment=progressTimeViewport.HorizontalAlignment=alignment=="left"?HorizontalAlignment.Left:HorizontalAlignment.Center;
+        AlignLyrics();
+        // 控件不再跟随句长移动，始终贴近封面一侧。
+        LayoutControls(contentWidth);
         masking=Convert.ToBoolean(s["progressMask"]);
         secondaryMasking=masking && Convert.ToString(s["layout"])=="double" && Convert.ToString(s["secondary"])=="translation";
         UpdateStops(primary,frame["characters"],ref primaryProfileKey,ref primaryStops);
@@ -1336,6 +1361,21 @@ sealed class TaskbarLyrics
         return natural;
     }
 
+    void AlignLyrics()
+    {
+        // 短句贴近右侧封面，溢出的长句仍从开头向左滚动。
+        AlignLyricLine(primary,primaryViewport.Width,primaryTextWidth,scrolling,lyricsRightAligned);
+        AlignLyricLine(secondary,secondaryViewport.Width,secondaryTextWidth,scrollingTranslation,lyricsRightAligned);
+    }
+    static void AlignLyricLine(TextBlock text,double viewportWidth,double naturalWidth,bool scroll,bool right)
+    {
+        // 收紧字框，避免右对齐的内部留白错开进度遮罩坐标。
+        if(right && !scroll)text.Width=Math.Min(viewportWidth,naturalWidth);
+        bool alignRight=right && (!scroll || text.Width<=viewportWidth);
+        text.HorizontalAlignment=alignRight?HorizontalAlignment.Right:HorizontalAlignment.Left;
+        text.TextAlignment=alignRight?TextAlignment.Right:TextAlignment.Left;
+    }
+
     void SizeLyrics(bool visible)
     {
         // 仅实际显示的歌词给进度条让位，隐藏时保持正常字号。
@@ -1346,6 +1386,7 @@ sealed class TaskbarLyrics
         primary.FontSize=first;secondary.FontSize=second;
         primaryTextWidth=FitLine(primary,primaryViewport.Width,scrolling);
         secondaryTextWidth=FitLine(secondary,secondaryViewport.Width,scrollingTranslation);
+        AlignLyrics();
         UpdateStops(primary,primaryCharacters,ref primaryProfileKey,ref primaryStops);
         UpdateStops(secondary,secondaryCharacters,ref secondaryProfileKey,ref secondaryStops);
     }

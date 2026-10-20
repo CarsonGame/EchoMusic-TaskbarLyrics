@@ -222,7 +222,7 @@ export async function activate(ctx) {
       const secondaryOptions=[{label:'下一句歌词',value:'next'},{label:'翻译／音译',value:'translation'}];
       const themeOptions=[{label:'跟随 Windows 任务栏',value:'auto'},{label:'自定义文字颜色',value:'custom'}];
       const coverShapeOptions=[{label:'矩形封面',value:'rectangle'},{label:'圆形封面',value:'circle'}];
-      const controlsAlignmentOptions=[{label:'靠左',value:'left'},{label:'随当前歌词长度居中',value:'center'}];
+      const placementAlignmentOptions=[{label:'居左',value:'left'},{label:'居中',value:'center'},{label:'居右（封面在右）',value:'right'}];
       const playedColorOptions=[{label:'手动设置',value:'custom'},{label:'封面自动取色',value:'cover'}];
       const controlsBackgroundOptions=[{label:'自定义颜色',value:'custom'},{label:'使用封面配色',value:'cover'}];
       const noticeBackgroundOptions=[{label:'自定义颜色',value:'custom'},{label:'使用封面配色',value:'cover'},{label:'毛玻璃',value:'glass'}];
@@ -306,7 +306,7 @@ export async function activate(ctx) {
         if (settings.enabled && !pid) await start();
       });
       const reset = () => { Object.assign(draft, DEFAULTS); return save(); };
-      return { draft, previewCapacity, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
+      return { draft, previewCapacity, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, placementAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
     }
   });
   ctx.ui.settings.define({ title:'任务栏歌词 · 微光', component:panel });

@@ -5,6 +5,16 @@ const snapshot = {
   playback:{trackId:'1',title:'歌曲',artist:'歌手',currentTime:1,updatedAt:1000,isPlaying:true,playbackRate:1,duration:10},
   lyric:{trackId:'1',timeOffset:0,lines:[{time:0,text:'第一句',translated:'one'},{time:2,text:'第二句',translated:'two'},{time:5,text:'第三句'}]}
 };
+test('整体对齐保留旧偏移，中心允许双向偏移并随快照同步',()=>{
+  assert.equal(normalize({offset:18}).placementAlignment,'left');
+  assert.equal(normalize({offset:18}).offset,18);
+  for(const placementAlignment of ['left','center','right']){
+    const s=normalize({placementAlignment,offset:-20});
+    assert.equal(s.offset,placementAlignment==='center'?-20:0);
+    assert.equal(makeFrame(snapshot,s,1000).settings.placementAlignment,placementAlignment);
+  }
+  assert.equal(normalize({placementAlignment:'invalid'}).placementAlignment,'left');
+});
 test('控件最小宽度默认 90px，允许 0 并传递到原生宿主',()=>{
   assert.equal(DEFAULTS.minimumControlsWidth,90);
   assert.equal(normalize({}).minimumControlsWidth,90);
@@ -258,11 +268,15 @@ test('收藏、封面和旋转时间来自当前歌曲，歌词偏移不会改�
   assert.equal(makeFrame({playback:null},DEFAULTS).trackId,'');
 });
 
-test('快捷按钮保留靠左和居中，旧靠右及无效选项恢复默认',()=>{
-  assert.equal(normalize({hoverControls:true}).controlsAlignment,DEFAULTS.controlsAlignment);
-  for(const alignment of ['left','center'])assert.equal(normalize({controlsAlignment:alignment}).controlsAlignment,alignment);
-  assert.equal(normalize({controlsAlignment:'right'}).controlsAlignment,DEFAULTS.controlsAlignment);
-  assert.equal(normalize({controlsAlignment:'invalid'}).controlsAlignment,DEFAULTS.controlsAlignment);
+test('移除快捷操作位置，旧值不再影响整体位置与其他设置',()=>{
+  assert.equal(Object.hasOwn(DEFAULTS,'controlsAlignment'),false);
+  for(const controlsAlignment of ['left','center','right','invalid']){
+    const settings=normalize({controlsAlignment,placementAlignment:'right',hoverControls:true,controlsCornerRadius:4});
+    assert.equal(Object.hasOwn(settings,'controlsAlignment'),false);
+    assert.equal(settings.placementAlignment,'right');
+    assert.equal(settings.hoverControls,true);
+    assert.equal(settings.controlsCornerRadius,4);
+  }
 });
 test('封面取色排除透明和黑白背景，切换封面产生不同主色',()=>{
   const red=coverAccentFromPixels(new Uint8ClampedArray([255,255,255,255,0,0,0,255,220,30,20,255,1,220,1,0]));

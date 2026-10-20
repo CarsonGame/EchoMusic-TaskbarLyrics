@@ -28,6 +28,7 @@ export const DEFAULTS = Object.freeze({
   "buttonPressedColor": "#3B585C",
   "progressMask": true,
   "offset": 12,
+  "placementAlignment": "left",
   "verticalOffset": 2,
   "opacity": 100,
   "theme": "custom",
@@ -35,7 +36,6 @@ export const DEFAULTS = Object.freeze({
   "hideFullscreen": true,
   "scrollLyrics": true,
   "hoverControls": true,
-  "controlsAlignment": "left",
   "showCover": true,
   "coverShape": "rectangle",
   "rotateCover": false,
@@ -63,8 +63,8 @@ export const DEFAULTS = Object.freeze({
 });
 export function normalize(value = {}) {
   const s = { ...DEFAULTS, ...value };
-  // 清理已移除的自动展示和信息宽度配置，旧设置不会恢复此行为。
-  for (const key of ["noticeEnabled","noticeOnlyTaskbarSwitch","noticeDuration","noticeFadeDuration","noticeHoldOnHover","noticeWidth"]) delete s[key];
+  // 清理已移除的配置，旧值不能恢复自动展示或控件位置选项。
+  for (const key of ["noticeEnabled","noticeOnlyTaskbarSwitch","noticeDuration","noticeFadeDuration","noticeHoldOnHover","noticeWidth","controlsAlignment"]) delete s[key];
   // 旧版字号迁移到独立行设置，保留用户原来的视觉比例。
   s.primaryFontSize = value.primaryFontSize ?? value.fontSize ?? DEFAULTS.primaryFontSize;
   s.secondaryFontSize = value.secondaryFontSize ?? (value.fontSize ? Math.round(value.fontSize * .8) : DEFAULTS.secondaryFontSize);
@@ -72,12 +72,15 @@ export function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['minimumControlsWidth',0,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['controlsCornerRadius',0,12],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
+  for (const [key, min, max] of [['width',120,900],['minimumControlsWidth',0,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',-2000,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['controlsCornerRadius',0,12],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
   // 兼容旧歌手字号字段，整段歌曲信息统一沿用歌名字号。
   s.noticeArtistFontSize = s.noticeTitleFontSize;
-  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom','cover','cover-primary']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
+  // 原左侧偏移继续保留；居中允许向左、向右调整。
+  if (!['left','center','right'].includes(s.placementAlignment)) s.placementAlignment='left';
+  if (s.placementAlignment!=='center') s.offset=Math.max(0,s.offset);
+  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom','cover','cover-primary']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
     if (!values.includes(s[key])) s[key] = DEFAULTS[key];
   }
   for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','hoverSongInfo','smartContrast','trackTransitions','lyricTransitions','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);

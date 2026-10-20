@@ -28,6 +28,7 @@ const DEFAULTS = Object.freeze({
   "buttonPressedColor": "#3B585C",
   "progressMask": true,
   "offset": 12,
+  "placementAlignment": "left",
   "verticalOffset": 2,
   "opacity": 100,
   "theme": "custom",
@@ -35,7 +36,6 @@ const DEFAULTS = Object.freeze({
   "hideFullscreen": true,
   "scrollLyrics": true,
   "hoverControls": true,
-  "controlsAlignment": "left",
   "showCover": true,
   "coverShape": "rectangle",
   "rotateCover": false,
@@ -63,8 +63,8 @@ const DEFAULTS = Object.freeze({
 });
 function normalize(value = {}) {
   const s = { ...DEFAULTS, ...value };
-  // 清理已移除的自动展示和信息宽度配置，旧设置不会恢复此行为。
-  for (const key of ["noticeEnabled","noticeOnlyTaskbarSwitch","noticeDuration","noticeFadeDuration","noticeHoldOnHover","noticeWidth"]) delete s[key];
+  // 清理已移除的配置，旧值不能恢复自动展示或控件位置选项。
+  for (const key of ["noticeEnabled","noticeOnlyTaskbarSwitch","noticeDuration","noticeFadeDuration","noticeHoldOnHover","noticeWidth","controlsAlignment"]) delete s[key];
   // 旧版字号迁移到独立行设置，保留用户原来的视觉比例。
   s.primaryFontSize = value.primaryFontSize ?? value.fontSize ?? DEFAULTS.primaryFontSize;
   s.secondaryFontSize = value.secondaryFontSize ?? (value.fontSize ? Math.round(value.fontSize * .8) : DEFAULTS.secondaryFontSize);
@@ -72,12 +72,15 @@ function normalize(value = {}) {
     if (s.theme==='light') { s.primaryColor=value.primaryColor || '#202D35';s.secondaryColor=value.secondaryColor || '#62737B'; }
     s.theme='custom';
   }
-  for (const [key, min, max] of [['width',120,900],['minimumControlsWidth',0,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',0,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['controlsCornerRadius',0,12],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
+  for (const [key, min, max] of [['width',120,900],['minimumControlsWidth',0,900],['fontSize',10,26],['primaryFontSize',10,36],['secondaryFontSize',8,36],['offset',-2000,2000],['verticalOffset',-20,20],['opacity',0,100],['controlsBackgroundOpacity',0,100],['controlsCornerRadius',0,12],['transitionDuration',100,1000],['lyricTransitionDuration',80,500],['noticeTransparency',0,100],['noticeRadius',0,24],['noticeGap',0,40],['noticeTitleFontSize',10,24]]) {
     s[key] = Math.min(max, Math.max(min, Number.isFinite(Number(s[key])) ? Number(s[key]) : DEFAULTS[key]));
   }
   // 兼容旧歌手字号字段，整段歌曲信息统一沿用歌名字号。
   s.noticeArtistFontSize = s.noticeTitleFontSize;
-  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['controlsAlignment',['left','center']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom','cover','cover-primary']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
+  // 原左侧偏移继续保留；居中允许向左、向右调整。
+  if (!['left','center','right'].includes(s.placementAlignment)) s.placementAlignment='left';
+  if (s.placementAlignment!=='center') s.offset=Math.max(0,s.offset);
+  for (const [key, values] of [['layout',['single','double']],['secondary',['next','translation']],['theme',['auto','light','dark','custom']],['coverShape',['rectangle','circle']],['playedColorSource',['custom','cover']],['controlsBackgroundSource',['custom','cover']],['controlsIconColorSource',['custom','cover']],['noticeBackgroundStyle',['custom','cover','glass']],['noticeTextSource',['auto','custom','cover','cover-primary']],['noticeTextAlignment',['left','center']],['lyricTransitionStyle',['fade','up','slide','zoom','spring','flip','jelly','wipe','down','drift','breathe','unveil']]]) {
     if (!values.includes(s[key])) s[key] = DEFAULTS[key];
   }
   for (const key of ['enabled','hidePaused','hideFullscreen','scrollLyrics','progressMask','hoverControls','showCover','rotateCover','buttonHoverBackground','buttonPressedBackground','hoverProgress','hoverSongInfo','smartContrast','trackTransitions','lyricTransitions','noticeShowArtist','noticeScrollText']) s[key] = Boolean(s[key]);
@@ -510,190 +513,188 @@ const _hoisted_25 = {
 const _hoisted_26 = { class: "tl-section" }
 const _hoisted_27 = { class: "tl-grid" }
 const _hoisted_28 = { class: "tl-field tl-span" }
-const _hoisted_29 = { class: "tl-field" }
-const _hoisted_30 = { class: "tl-note" }
-const _hoisted_31 = { class: "tl-field" }
+const _hoisted_29 = { class: "tl-field tl-span" }
+const _hoisted_30 = { class: "tl-field" }
+const _hoisted_31 = { class: "tl-note" }
 const _hoisted_32 = { class: "tl-field" }
 const _hoisted_33 = { class: "tl-field" }
 const _hoisted_34 = { class: "tl-field" }
-const _hoisted_35 = { class: "tl-section" }
-const _hoisted_36 = { class: "tl-grid" }
-const _hoisted_37 = { class: "tl-field" }
-const _hoisted_38 = { class: "tl-field" }
-const _hoisted_39 = {
+const _hoisted_35 = { class: "tl-note" }
+const _hoisted_36 = { class: "tl-field" }
+const _hoisted_37 = { class: "tl-section" }
+const _hoisted_38 = { class: "tl-grid" }
+const _hoisted_39 = { class: "tl-field" }
+const _hoisted_40 = { class: "tl-field" }
+const _hoisted_41 = {
   key: 0,
   class: "tl-field tl-span"
 }
-const _hoisted_40 = { class: "tl-field tl-span" }
-const _hoisted_41 = { class: "tl-toggle tl-mask-toggle" }
-const _hoisted_42 = {
+const _hoisted_42 = { class: "tl-field tl-span" }
+const _hoisted_43 = { class: "tl-toggle tl-mask-toggle" }
+const _hoisted_44 = {
   key: 0,
   class: "tl-field tl-palette-field"
 }
-const _hoisted_43 = {
+const _hoisted_45 = {
   key: 0,
   class: "tl-note tl-auto-color"
 }
-const _hoisted_44 = { class: "tl-type-card" }
-const _hoisted_45 = { class: "tl-card-label" }
-const _hoisted_46 = {
+const _hoisted_46 = { class: "tl-type-card" }
+const _hoisted_47 = { class: "tl-card-label" }
+const _hoisted_48 = {
   key: 0,
   class: "tl-color-row"
 }
-const _hoisted_47 = { class: "tl-color-control" }
-const _hoisted_48 = ["value", "onInput"]
-const _hoisted_49 = {
+const _hoisted_49 = { class: "tl-color-control" }
+const _hoisted_50 = ["value", "onInput"]
+const _hoisted_51 = {
   key: 1,
   class: "tl-color-row"
 }
-const _hoisted_50 = { class: "tl-color-control" }
-const _hoisted_51 = ["value", "onInput"]
-const _hoisted_52 = {
+const _hoisted_52 = { class: "tl-color-control" }
+const _hoisted_53 = ["value", "onInput"]
+const _hoisted_54 = {
   key: 0,
   class: "tl-type-card"
 }
-const _hoisted_53 = { class: "tl-card-label" }
-const _hoisted_54 = {
+const _hoisted_55 = { class: "tl-card-label" }
+const _hoisted_56 = {
   key: 0,
   class: "tl-color-row"
 }
-const _hoisted_55 = { class: "tl-color-control" }
-const _hoisted_56 = ["value", "onInput"]
-const _hoisted_57 = {
+const _hoisted_57 = { class: "tl-color-control" }
+const _hoisted_58 = ["value", "onInput"]
+const _hoisted_59 = {
   key: 1,
   class: "tl-color-row"
 }
-const _hoisted_58 = { class: "tl-color-control" }
-const _hoisted_59 = ["value", "onInput"]
-const _hoisted_60 = {
+const _hoisted_60 = { class: "tl-color-control" }
+const _hoisted_61 = ["value", "onInput"]
+const _hoisted_62 = {
   key: 1,
   class: "tl-toggle"
 }
-const _hoisted_61 = {
+const _hoisted_63 = {
   key: 2,
   class: "tl-dependent tl-field"
 }
-const _hoisted_62 = {
+const _hoisted_64 = {
   key: 3,
   class: "tl-dependent tl-field"
 }
-const _hoisted_63 = {
+const _hoisted_65 = {
   key: 4,
   class: "tl-toggle"
 }
-const _hoisted_64 = { class: "tl-toggle" }
-const _hoisted_65 = {
+const _hoisted_66 = { class: "tl-toggle" }
+const _hoisted_67 = {
   key: 5,
   class: "tl-dependent tl-field"
 }
-const _hoisted_66 = { class: "tl-section" }
-const _hoisted_67 = { class: "tl-toggle" }
-const _hoisted_68 = {
+const _hoisted_68 = { class: "tl-section" }
+const _hoisted_69 = { class: "tl-toggle" }
+const _hoisted_70 = {
   key: 0,
   class: "tl-dependent"
 }
-const _hoisted_69 = { class: "tl-field" }
-const _hoisted_70 = {
+const _hoisted_71 = { class: "tl-field" }
+const _hoisted_72 = {
   key: 0,
   class: "tl-toggle tl-inner-toggle"
 }
-const _hoisted_71 = { class: "tl-section" }
-const _hoisted_72 = { class: "tl-toggle" }
-const _hoisted_73 = { class: "tl-toggle" }
-const _hoisted_74 = {
+const _hoisted_73 = { class: "tl-section" }
+const _hoisted_74 = { class: "tl-toggle" }
+const _hoisted_75 = { class: "tl-toggle" }
+const _hoisted_76 = {
   key: 0,
-  class: "tl-dependent tl-field"
-}
-const _hoisted_75 = {
-  key: 1,
   class: "tl-dependent tl-controls-settings"
 }
-const _hoisted_76 = { class: "tl-field" }
-const _hoisted_77 = {
+const _hoisted_77 = { class: "tl-field" }
+const _hoisted_78 = {
   key: 0,
   class: "tl-note tl-auto-color"
 }
-const _hoisted_78 = {
+const _hoisted_79 = {
   key: 0,
   class: "tl-color-row"
 }
-const _hoisted_79 = { class: "tl-color-control" }
-const _hoisted_80 = ["value", "onInput"]
-const _hoisted_81 = { class: "tl-field" }
-const _hoisted_82 = {
+const _hoisted_80 = { class: "tl-color-control" }
+const _hoisted_81 = ["value", "onInput"]
+const _hoisted_82 = { class: "tl-field" }
+const _hoisted_83 = {
   key: 0,
   class: "tl-note tl-auto-color"
 }
-const _hoisted_83 = {
+const _hoisted_84 = {
   key: 1,
   class: "tl-color-row"
 }
-const _hoisted_84 = { class: "tl-color-control" }
-const _hoisted_85 = ["value", "onInput"]
-const _hoisted_86 = { class: "tl-field" }
+const _hoisted_85 = { class: "tl-color-control" }
+const _hoisted_86 = ["value", "onInput"]
 const _hoisted_87 = { class: "tl-field" }
-const _hoisted_88 = { class: "tl-feedback-settings" }
-const _hoisted_89 = { class: "tl-toggle tl-inner-toggle" }
-const _hoisted_90 = {
+const _hoisted_88 = { class: "tl-field" }
+const _hoisted_89 = { class: "tl-feedback-settings" }
+const _hoisted_90 = { class: "tl-toggle tl-inner-toggle" }
+const _hoisted_91 = {
   key: 0,
   class: "tl-color-row"
 }
-const _hoisted_91 = { class: "tl-color-control" }
-const _hoisted_92 = ["value", "onInput"]
-const _hoisted_93 = { class: "tl-toggle tl-inner-toggle" }
-const _hoisted_94 = {
+const _hoisted_92 = { class: "tl-color-control" }
+const _hoisted_93 = ["value", "onInput"]
+const _hoisted_94 = { class: "tl-toggle tl-inner-toggle" }
+const _hoisted_95 = {
   key: 0,
   class: "tl-color-row"
 }
-const _hoisted_95 = { class: "tl-color-control" }
-const _hoisted_96 = ["value", "onInput"]
-const _hoisted_97 = { class: "tl-section" }
-const _hoisted_98 = { class: "tl-toggle" }
-const _hoisted_99 = {
+const _hoisted_96 = { class: "tl-color-control" }
+const _hoisted_97 = ["value", "onInput"]
+const _hoisted_98 = { class: "tl-section" }
+const _hoisted_99 = { class: "tl-toggle" }
+const _hoisted_100 = {
   key: 0,
   class: "tl-dependent tl-notice-settings"
 }
-const _hoisted_100 = { class: "tl-toggle tl-inner-toggle" }
-const _hoisted_101 = { class: "tl-grid" }
-const _hoisted_102 = { class: "tl-field tl-span" }
+const _hoisted_101 = { class: "tl-toggle tl-inner-toggle" }
+const _hoisted_102 = { class: "tl-grid" }
 const _hoisted_103 = { class: "tl-field tl-span" }
 const _hoisted_104 = { class: "tl-field tl-span" }
-const _hoisted_105 = {
-  key: 0,
-  class: "tl-note"
-}
+const _hoisted_105 = { class: "tl-field tl-span" }
 const _hoisted_106 = {
-  key: 1,
+  key: 0,
   class: "tl-note"
 }
 const _hoisted_107 = {
-  key: 2,
+  key: 1,
   class: "tl-note"
 }
 const _hoisted_108 = {
+  key: 2,
+  class: "tl-note"
+}
+const _hoisted_109 = {
   key: 0,
   class: "tl-color-row"
 }
-const _hoisted_109 = { class: "tl-color-control" }
-const _hoisted_110 = ["value", "onInput"]
-const _hoisted_111 = {
+const _hoisted_110 = { class: "tl-color-control" }
+const _hoisted_111 = ["value", "onInput"]
+const _hoisted_112 = {
   key: 1,
   class: "tl-color-row"
 }
-const _hoisted_112 = { class: "tl-color-control" }
-const _hoisted_113 = ["value", "onInput"]
-const _hoisted_114 = { class: "tl-toggle tl-inner-toggle" }
-const _hoisted_115 = { class: "tl-section" }
-const _hoisted_116 = { class: "tl-toggle" }
+const _hoisted_113 = { class: "tl-color-control" }
+const _hoisted_114 = ["value", "onInput"]
+const _hoisted_115 = { class: "tl-toggle tl-inner-toggle" }
+const _hoisted_116 = { class: "tl-section" }
 const _hoisted_117 = { class: "tl-toggle" }
 const _hoisted_118 = { class: "tl-toggle" }
-const _hoisted_119 = {
+const _hoisted_119 = { class: "tl-toggle" }
+const _hoisted_120 = {
   key: 1,
   class: "tl-empty-settings"
 }
-const _hoisted_120 = { class: "tl-footer" }
-const _hoisted_121 = { class: "tl-actions" }
-const _hoisted_122 = {
+const _hoisted_121 = { class: "tl-footer" }
+const _hoisted_122 = { class: "tl-actions" }
+const _hoisted_123 = {
   role: "status",
   class: "tl-status"
 }
@@ -740,13 +741,13 @@ return function render(_ctx, _cache) {
           : _createCommentVNode("v-if", true)
       ]),
       _createElementVNode("div", {
-        class: _normalizeClass(["tl-preview", { 'tl-preview-light': _ctx.previewLight, 'tl-preview-hover': _ctx.previewCapacity.lyrics && (_ctx.draft.hoverControls || _ctx.draft.hoverProgress || _ctx.draft.hoverSongInfo), 'tl-controls-left': _ctx.draft.controlsAlignment === 'left', 'tl-preview-progress-enabled':_ctx.previewCapacity.lyrics && _ctx.draft.hoverProgress, 'tl-preview-animated':_ctx.draft.trackTransitions }]),
+        class: _normalizeClass(["tl-preview tl-controls-edge", { 'tl-preview-light': _ctx.previewLight, 'tl-preview-hover': _ctx.previewCapacity.lyrics && (_ctx.draft.hoverControls || _ctx.draft.hoverProgress || _ctx.draft.hoverSongInfo), 'tl-preview-progress-enabled':_ctx.previewCapacity.lyrics && _ctx.draft.hoverProgress, 'tl-preview-animated':_ctx.draft.trackTransitions }]),
         onPointerenter: _ctx.onPreviewCoverHover,
         style: _normalizeStyle({ fontFamily:_ctx.previewFont, opacity:_ctx.draft.opacity / 100, '--tl-transition-duration':_ctx.draft.transitionDuration + 'ms', '--tl-controls-radius':_ctx.draft.controlsCornerRadius + 'px' })
       }, [
         _createElementVNode("div", {
           class: "tl-preview-body",
-          style: _normalizeStyle({ transform:'translateY(' + _ctx.draft.verticalOffset + 'px)', width:_ctx.previewCapacity.width + 'px', maxWidth:'100%', flex:'0 1 auto' })
+          style: _normalizeStyle({ transform:'translateY(' + _ctx.draft.verticalOffset + 'px)', width:_ctx.previewCapacity.width + 'px', maxWidth:'100%', flex:'0 1 auto', flexDirection:_ctx.draft.placementAlignment === 'right' ? 'row-reverse' : 'row', marginLeft:_ctx.draft.placementAlignment === 'left' ? '0' : 'auto', marginRight:_ctx.draft.placementAlignment === 'right' ? '0' : 'auto' })
         }, [
           (_ctx.previewCapacity.cover)
             ? (_openBlock(), _createElementBlock("div", {
@@ -780,8 +781,8 @@ return function render(_ctx, _cache) {
           (_ctx.previewCapacity.lyrics)
             ? (_openBlock(), _createElementBlock("div", {
                 key: 1,
-                class: "tl-preview-content",
-                style: _normalizeStyle({ '--tl-info-height':(12 * _ctx.draft.noticeTitleFontSize / 15) + 'px' })
+                class: _normalizeClass(["tl-preview-content", { 'tl-placement-right': _ctx.draft.placementAlignment === 'right' }]),
+                style: _normalizeStyle({ minWidth: _ctx.draft.placementAlignment === 'right' ? Math.min(150, Math.max(0, _ctx.previewCapacity.width - (_ctx.previewCapacity.cover ? 44 : 0))) + 'px' : '0', '--tl-info-height':(12 * _ctx.draft.noticeTitleFontSize / 15) + 'px' })
               }, [
                 _createElementVNode("div", {
                   class: _normalizeClass(["tl-preview-interaction", { 'tl-no-buttons':!_ctx.draft.hoverControls, 'tl-progress-hovered':_ctx.previewProgressHovered }]),
@@ -924,7 +925,7 @@ return function render(_ctx, _cache) {
                       : _createCommentVNode("v-if", true)
                   ], 6 /* CLASS, STYLE */))
                 ])
-              ], 4 /* STYLE */))
+              ], 6 /* CLASS, STYLE */))
             : _createCommentVNode("v-if", true)
         ], 4 /* STYLE */)
       ], 46 /* CLASS, STYLE, PROPS, NEED_HYDRATION */, _hoisted_6),
@@ -946,7 +947,7 @@ return function render(_ctx, _cache) {
     (_ctx.draft.enabled)
       ? (_openBlock(), _createElementBlock("div", _hoisted_25, [
           _createElementVNode("section", _hoisted_26, [
-            _cache[20] || (_cache[20] = _createElementVNode("div", { class: "tl-section-heading" }, [
+            _cache[22] || (_cache[22] = _createElementVNode("div", { class: "tl-section-heading" }, [
               _createElementVNode("h3", null, "显示与位置"),
               _createElementVNode("p", null, "选择屏幕，调整歌词占用的空间。")
             ], -1 /* CACHED */)),
@@ -961,8 +962,17 @@ return function render(_ctx, _cache) {
                 _cache[11] || (_cache[11] = _createElementVNode("p", { class: "tl-note" }, "指定屏幕断开时，自动回到主屏幕。", -1 /* CACHED */))
               ]),
               _createElementVNode("div", _hoisted_29, [
+                _cache[12] || (_cache[12] = _createElementVNode("label", null, "整体位置", -1 /* CACHED */)),
+                _createVNode(_component_Select, {
+                  modelValue: _ctx.draft.placementAlignment,
+                  "onUpdate:modelValue": $event => ((_ctx.draft.placementAlignment) = $event),
+                  options: _ctx.placementAlignmentOptions
+                }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
+                _cache[13] || (_cache[13] = _createElementVNode("p", { class: "tl-note" }, "以每块任务栏为基准。居左向右避让；居中优先保持中心，空间被占用时向右寻找空位；居右向左避让，封面放在歌词右侧。空间恢复后回到所选位置。", -1 /* CACHED */))
+              ]),
+              _createElementVNode("div", _hoisted_30, [
                 _createElementVNode("label", null, [
-                  _cache[12] || (_cache[12] = _createTextVNode("最大显示宽度 ", -1 /* CACHED */)),
+                  _cache[14] || (_cache[14] = _createTextVNode("最大显示宽度 ", -1 /* CACHED */)),
                   _createElementVNode("span", null, _toDisplayString(_ctx.draft.width) + " px", 1 /* TEXT */)
                 ]),
                 _createVNode(_component_Slider, {
@@ -972,10 +982,10 @@ return function render(_ctx, _cache) {
                   max: 900,
                   step: 10
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
-                _createElementVNode("p", _hoisted_30, "包含封面、间距与歌词区域；当前完整显示至少需要 " + _toDisplayString(_ctx.previewCapacity.requiredWidth) + " px。实际宽度随任务栏空位自动收缩，数值按各屏幕缩放适配。", 1 /* TEXT */)
+                _createElementVNode("p", _hoisted_31, "包含封面、间距与歌词区域；当前完整显示至少需要 " + _toDisplayString(_ctx.previewCapacity.requiredWidth) + " px。实际宽度随任务栏空位自动收缩，数值按各屏幕缩放适配。", 1 /* TEXT */)
               ]),
-              _createElementVNode("div", _hoisted_31, [
-                _cache[13] || (_cache[13] = _createElementVNode("label", null, [
+              _createElementVNode("div", _hoisted_32, [
+                _cache[15] || (_cache[15] = _createElementVNode("label", null, [
                   _createTextVNode("控件最小宽度 "),
                   _createElementVNode("span", null, "px")
                 ], -1 /* CACHED */)),
@@ -986,11 +996,11 @@ return function render(_ctx, _cache) {
                   max: 900,
                   step: 10
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
-                _cache[14] || (_cache[14] = _createElementVNode("p", { class: "tl-note" }, "默认 90 px，可设为 0。歌词区域不足此宽度时隐藏歌词与悬浮控件，只保留封面；封面也放不下时整体隐藏。设为 0 时不按控件宽度收起，按钮仍保持原尺寸并裁切在可用区域内。", -1 /* CACHED */))
+                _cache[16] || (_cache[16] = _createElementVNode("p", { class: "tl-note" }, "默认 90 px，可设为 0。歌词区域不足此宽度时隐藏歌词与悬浮控件，只保留封面；封面也放不下时整体隐藏。设为 0 时不按控件宽度收起，按钮仍保持原尺寸并裁切在可用区域内。", -1 /* CACHED */))
               ]),
-              _createElementVNode("div", _hoisted_32, [
+              _createElementVNode("div", _hoisted_33, [
                 _createElementVNode("label", null, [
-                  _cache[15] || (_cache[15] = _createTextVNode("透明度 ", -1 /* CACHED */)),
+                  _cache[17] || (_cache[17] = _createTextVNode("透明度 ", -1 /* CACHED */)),
                   _createElementVNode("span", null, _toDisplayString(_ctx.transparency) + "%", 1 /* TEXT */)
                 ]),
                 _createVNode(_component_Slider, {
@@ -1000,20 +1010,24 @@ return function render(_ctx, _cache) {
                   max: 100,
                   step: 1
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
-                _cache[16] || (_cache[16] = _createElementVNode("p", { class: "tl-note" }, "0% 不透明，100% 完全透明。影响歌词、封面、按钮和进度条。", -1 /* CACHED */))
+                _cache[18] || (_cache[18] = _createElementVNode("p", { class: "tl-note" }, "0% 不透明，100% 完全透明。影响歌词、封面、按钮和进度条。", -1 /* CACHED */))
               ]),
-              _createElementVNode("div", _hoisted_33, [
-                _cache[17] || (_cache[17] = _createElementVNode("label", null, "距任务栏左侧", -1 /* CACHED */)),
+              _createElementVNode("div", _hoisted_34, [
+                _createElementVNode("label", null, [
+                  _createTextVNode(_toDisplayString(_ctx.draft.placementAlignment === 'center' ? '相对中心偏移' : _ctx.draft.placementAlignment === 'right' ? '距任务栏右侧' : '距任务栏左侧') + " ", 1 /* TEXT */),
+                  _cache[19] || (_cache[19] = _createElementVNode("span", null, "px", -1 /* CACHED */))
+                ]),
                 _createVNode(_component_InputNumber, {
                   modelValue: _ctx.draft.offset,
                   "onUpdate:modelValue": $event => ((_ctx.draft.offset) = $event),
-                  min: 0,
+                  min: _ctx.draft.placementAlignment === 'center' ? -2000 : 0,
                   max: 2000,
                   step: 1
-                }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
+                }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "min"]),
+                _createElementVNode("p", _hoisted_35, _toDisplayString(_ctx.draft.placementAlignment === 'center' ? '0 为正中，负数向左，正数向右；任务栏占用优先于偏移。' : '数值越大，离所选边缘越远；实际位置会避让系统按钮和应用图标。'), 1 /* TEXT */)
               ]),
-              _createElementVNode("div", _hoisted_34, [
-                _cache[18] || (_cache[18] = _createElementVNode("label", null, [
+              _createElementVNode("div", _hoisted_36, [
+                _cache[20] || (_cache[20] = _createElementVNode("label", null, [
                   _createTextVNode("垂直偏移 "),
                   _createElementVNode("span", null, "px")
                 ], -1 /* CACHED */)),
@@ -1024,26 +1038,26 @@ return function render(_ctx, _cache) {
                   max: 20,
                   step: 1
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
-                _cache[19] || (_cache[19] = _createElementVNode("p", { class: "tl-note" }, "负数向上，正数向下，0 为居中。封面、歌词和按钮一起移动；偏移过大时边缘可能被裁切。", -1 /* CACHED */))
+                _cache[21] || (_cache[21] = _createElementVNode("p", { class: "tl-note" }, "负数向上，正数向下，0 为居中。封面、歌词和按钮一起移动；偏移过大时边缘可能被裁切。", -1 /* CACHED */))
               ])
             ])
           ]),
-          _createElementVNode("section", _hoisted_35, [
-            _cache[42] || (_cache[42] = _createElementVNode("div", { class: "tl-section-heading" }, [
+          _createElementVNode("section", _hoisted_37, [
+            _cache[44] || (_cache[44] = _createElementVNode("div", { class: "tl-section-heading" }, [
               _createElementVNode("h3", null, "歌词外观"),
               _createElementVNode("p", null, "字体、行数与颜色，在上方实时预览。")
             ], -1 /* CACHED */)),
-            _createElementVNode("div", _hoisted_36, [
-              _createElementVNode("div", _hoisted_37, [
-                _cache[21] || (_cache[21] = _createElementVNode("label", null, "歌词行数", -1 /* CACHED */)),
+            _createElementVNode("div", _hoisted_38, [
+              _createElementVNode("div", _hoisted_39, [
+                _cache[23] || (_cache[23] = _createElementVNode("label", null, "歌词行数", -1 /* CACHED */)),
                 _createVNode(_component_Select, {
                   modelValue: _ctx.draft.layout,
                   "onUpdate:modelValue": $event => ((_ctx.draft.layout) = $event),
                   options: _ctx.layoutOptions
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"])
               ]),
-              _createElementVNode("div", _hoisted_38, [
-                _cache[22] || (_cache[22] = _createElementVNode("label", null, "歌词字体", -1 /* CACHED */)),
+              _createElementVNode("div", _hoisted_40, [
+                _cache[24] || (_cache[24] = _createElementVNode("label", null, "歌词字体", -1 /* CACHED */)),
                 _createVNode(_component_Select, {
                   modelValue: _ctx.draft.fontFamily,
                   "onUpdate:modelValue": $event => ((_ctx.draft.fontFamily) = $event),
@@ -1052,8 +1066,8 @@ return function render(_ctx, _cache) {
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"])
               ]),
               (_ctx.draft.layout === 'double')
-                ? (_openBlock(), _createElementBlock("div", _hoisted_39, [
-                    _cache[23] || (_cache[23] = _createElementVNode("label", null, "第二行内容", -1 /* CACHED */)),
+                ? (_openBlock(), _createElementBlock("div", _hoisted_41, [
+                    _cache[25] || (_cache[25] = _createElementVNode("label", null, "第二行内容", -1 /* CACHED */)),
                     _createVNode(_component_Select, {
                       modelValue: _ctx.draft.secondary,
                       "onUpdate:modelValue": $event => ((_ctx.draft.secondary) = $event),
@@ -1061,8 +1075,8 @@ return function render(_ctx, _cache) {
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"])
                   ]))
                 : _createCommentVNode("v-if", true),
-              _createElementVNode("div", _hoisted_40, [
-                _cache[24] || (_cache[24] = _createElementVNode("label", null, "待歌词颜色", -1 /* CACHED */)),
+              _createElementVNode("div", _hoisted_42, [
+                _cache[26] || (_cache[26] = _createElementVNode("label", null, "待歌词颜色", -1 /* CACHED */)),
                 _createVNode(_component_Select, {
                   modelValue: _ctx.draft.theme,
                   "onUpdate:modelValue": $event => ((_ctx.draft.theme) = $event),
@@ -1070,8 +1084,8 @@ return function render(_ctx, _cache) {
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"])
               ])
             ]),
-            _createElementVNode("div", _hoisted_41, [
-              _cache[25] || (_cache[25] = _createElementVNode("div", null, [
+            _createElementVNode("div", _hoisted_43, [
+              _cache[27] || (_cache[27] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "歌词进度遮罩"),
                 _createElementVNode("p", null, "同一层文字随进度变色，支持逐字进度。")
               ], -1 /* CACHED */)),
@@ -1081,19 +1095,19 @@ return function render(_ctx, _cache) {
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
             (_ctx.draft.progressMask)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_42, [
-                  _cache[27] || (_cache[27] = _createElementVNode("label", null, "歌词进度遮罩颜色", -1 /* CACHED */)),
+              ? (_openBlock(), _createElementBlock("div", _hoisted_44, [
+                  _cache[29] || (_cache[29] = _createElementVNode("label", null, "歌词进度遮罩颜色", -1 /* CACHED */)),
                   _createVNode(_component_Select, {
                     modelValue: _ctx.draft.playedColorSource,
                     "onUpdate:modelValue": $event => ((_ctx.draft.playedColorSource) = $event),
                     options: _ctx.playedColorOptions
                   }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
                   (_ctx.draft.playedColorSource === 'cover')
-                    ? (_openBlock(), _createElementBlock("p", _hoisted_43, [
+                    ? (_openBlock(), _createElementBlock("p", _hoisted_45, [
                         _createElementVNode("span", {
                           style: _normalizeStyle({ background:_ctx.previewPlayed.primary })
                         }, null, 4 /* STYLE */),
-                        _cache[26] || (_cache[26] = _createTextVNode("优先使用当前封面的鲜艳颜色作为歌词遮罩颜色，切歌取色期间保留上一颜色，成功后更新；首次取色前使用手动颜色。", -1 /* CACHED */))
+                        _cache[28] || (_cache[28] = _createTextVNode("优先使用当前封面的鲜艳颜色作为歌词遮罩颜色，切歌取色期间保留上一颜色，成功后更新；首次取色前使用手动颜色。", -1 /* CACHED */))
                       ]))
                     : _createCommentVNode("v-if", true)
                 ]))
@@ -1101,10 +1115,10 @@ return function render(_ctx, _cache) {
             _createElementVNode("div", {
               class: _normalizeClass(["tl-type-grid", { 'tl-one-line': _ctx.draft.layout === 'single' }])
             }, [
-              _createElementVNode("div", _hoisted_44, [
-                _createElementVNode("div", _hoisted_45, [
-                  _cache[28] || (_cache[28] = _createElementVNode("span", { class: "tl-dot" }, "1", -1 /* CACHED */)),
-                  _cache[29] || (_cache[29] = _createElementVNode("h4", null, "第一行", -1 /* CACHED */)),
+              _createElementVNode("div", _hoisted_46, [
+                _createElementVNode("div", _hoisted_47, [
+                  _cache[30] || (_cache[30] = _createElementVNode("span", { class: "tl-dot" }, "1", -1 /* CACHED */)),
+                  _cache[31] || (_cache[31] = _createElementVNode("h4", null, "第一行", -1 /* CACHED */)),
                   _createElementVNode("span", null, _toDisplayString(_ctx.draft.primaryFontSize) + " px", 1 /* TEXT */)
                 ]),
                 _createVNode(_component_Slider, {
@@ -1115,39 +1129,39 @@ return function render(_ctx, _cache) {
                   step: 1
                 }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
                 (_ctx.draft.theme === 'custom')
-                  ? (_openBlock(), _createElementBlock("div", _hoisted_46, [
-                      _cache[30] || (_cache[30] = _createElementVNode("label", null, "文字颜色", -1 /* CACHED */)),
-                      _createElementVNode("label", _hoisted_47, [
+                  ? (_openBlock(), _createElementBlock("div", _hoisted_48, [
+                      _cache[32] || (_cache[32] = _createElementVNode("label", null, "文字颜色", -1 /* CACHED */)),
+                      _createElementVNode("label", _hoisted_49, [
                         _createElementVNode("input", {
                           type: "color",
                           "aria-label": "第一行文字颜色",
                           value: _ctx.draft.primaryColor,
                           onInput: $event => (_ctx.setColor('primaryColor', $event))
-                        }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_48),
+                        }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_50),
                         _createElementVNode("span", null, _toDisplayString(_ctx.draft.primaryColor), 1 /* TEXT */)
                       ])
                     ]))
                   : _createCommentVNode("v-if", true),
                 (_ctx.draft.progressMask && _ctx.draft.playedColorSource === 'custom')
-                  ? (_openBlock(), _createElementBlock("div", _hoisted_49, [
-                      _cache[31] || (_cache[31] = _createElementVNode("label", null, "已播放颜色", -1 /* CACHED */)),
-                      _createElementVNode("label", _hoisted_50, [
+                  ? (_openBlock(), _createElementBlock("div", _hoisted_51, [
+                      _cache[33] || (_cache[33] = _createElementVNode("label", null, "已播放颜色", -1 /* CACHED */)),
+                      _createElementVNode("label", _hoisted_52, [
                         _createElementVNode("input", {
                           type: "color",
                           "aria-label": "第一行已播放颜色",
                           value: _ctx.draft.primaryPlayedColor,
                           onInput: $event => (_ctx.setColor('primaryPlayedColor', $event))
-                        }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_51),
+                        }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_53),
                         _createElementVNode("span", null, _toDisplayString(_ctx.draft.primaryPlayedColor), 1 /* TEXT */)
                       ])
                     ]))
                   : _createCommentVNode("v-if", true)
               ]),
               (_ctx.draft.layout === 'double')
-                ? (_openBlock(), _createElementBlock("div", _hoisted_52, [
-                    _createElementVNode("div", _hoisted_53, [
-                      _cache[32] || (_cache[32] = _createElementVNode("span", { class: "tl-dot" }, "2", -1 /* CACHED */)),
-                      _cache[33] || (_cache[33] = _createElementVNode("h4", null, "第二行", -1 /* CACHED */)),
+                ? (_openBlock(), _createElementBlock("div", _hoisted_54, [
+                    _createElementVNode("div", _hoisted_55, [
+                      _cache[34] || (_cache[34] = _createElementVNode("span", { class: "tl-dot" }, "2", -1 /* CACHED */)),
+                      _cache[35] || (_cache[35] = _createElementVNode("h4", null, "第二行", -1 /* CACHED */)),
                       _createElementVNode("span", null, _toDisplayString(_ctx.draft.secondaryFontSize) + " px", 1 /* TEXT */)
                     ]),
                     _createVNode(_component_Slider, {
@@ -1158,29 +1172,29 @@ return function render(_ctx, _cache) {
                       step: 1
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
                     (_ctx.draft.theme === 'custom')
-                      ? (_openBlock(), _createElementBlock("div", _hoisted_54, [
-                          _cache[34] || (_cache[34] = _createElementVNode("label", null, "文字颜色", -1 /* CACHED */)),
-                          _createElementVNode("label", _hoisted_55, [
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_56, [
+                          _cache[36] || (_cache[36] = _createElementVNode("label", null, "文字颜色", -1 /* CACHED */)),
+                          _createElementVNode("label", _hoisted_57, [
                             _createElementVNode("input", {
                               type: "color",
                               "aria-label": "第二行文字颜色",
                               value: _ctx.draft.secondaryColor,
                               onInput: $event => (_ctx.setColor('secondaryColor', $event))
-                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_56),
+                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_58),
                             _createElementVNode("span", null, _toDisplayString(_ctx.draft.secondaryColor), 1 /* TEXT */)
                           ])
                         ]))
                       : _createCommentVNode("v-if", true),
                     (_ctx.draft.progressMask && _ctx.draft.secondary === 'translation' && _ctx.draft.playedColorSource === 'custom')
-                      ? (_openBlock(), _createElementBlock("div", _hoisted_57, [
-                          _cache[35] || (_cache[35] = _createElementVNode("label", null, "已播放颜色", -1 /* CACHED */)),
-                          _createElementVNode("label", _hoisted_58, [
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_59, [
+                          _cache[37] || (_cache[37] = _createElementVNode("label", null, "已播放颜色", -1 /* CACHED */)),
+                          _createElementVNode("label", _hoisted_60, [
                             _createElementVNode("input", {
                               type: "color",
                               "aria-label": "第二行已播放颜色",
                               value: _ctx.draft.secondaryPlayedColor,
                               onInput: $event => (_ctx.setColor('secondaryPlayedColor', $event))
-                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_59),
+                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_61),
                             _createElementVNode("span", null, _toDisplayString(_ctx.draft.secondaryPlayedColor), 1 /* TEXT */)
                           ])
                         ]))
@@ -1188,10 +1202,10 @@ return function render(_ctx, _cache) {
                   ]))
                 : _createCommentVNode("v-if", true)
             ], 2 /* CLASS */),
-            _cache[43] || (_cache[43] = _createElementVNode("p", { class: "tl-note" }, "任务栏高度不足时，字号按比例适配。", -1 /* CACHED */)),
+            _cache[45] || (_cache[45] = _createElementVNode("p", { class: "tl-note" }, "任务栏高度不足时，字号按比例适配。", -1 /* CACHED */)),
             (_ctx.draft.layout === 'double')
-              ? (_openBlock(), _createElementBlock("div", _hoisted_60, [
-                  _cache[36] || (_cache[36] = _createElementVNode("div", null, [
+              ? (_openBlock(), _createElementBlock("div", _hoisted_62, [
+                  _cache[38] || (_cache[38] = _createElementVNode("div", null, [
                     _createElementVNode("span", null, "双行歌词切换动画"),
                     _createElementVNode("p", null, "正常换句时播放所选效果，进度实时同步；切歌和跳转直接显示。移动空间不足时只淡入。")
                   ], -1 /* CACHED */)),
@@ -1202,8 +1216,8 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true),
             (_ctx.draft.layout === 'double' && _ctx.draft.lyricTransitions)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_61, [
-                  _cache[37] || (_cache[37] = _createElementVNode("label", null, "换句动画样式", -1 /* CACHED */)),
+              ? (_openBlock(), _createElementBlock("div", _hoisted_63, [
+                  _cache[39] || (_cache[39] = _createElementVNode("label", null, "换句动画样式", -1 /* CACHED */)),
                   _createVNode(_component_Select, {
                     modelValue: _ctx.draft.lyricTransitionStyle,
                     "onUpdate:modelValue": $event => ((_ctx.draft.lyricTransitionStyle) = $event),
@@ -1212,9 +1226,9 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true),
             (_ctx.draft.layout === 'double' && _ctx.draft.lyricTransitions)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_62, [
+              ? (_openBlock(), _createElementBlock("div", _hoisted_64, [
                   _createElementVNode("label", null, [
-                    _cache[38] || (_cache[38] = _createTextVNode("换句动画时长 ", -1 /* CACHED */)),
+                    _cache[40] || (_cache[40] = _createTextVNode("换句动画时长 ", -1 /* CACHED */)),
                     _createElementVNode("span", null, _toDisplayString(_ctx.draft.lyricTransitionDuration) + " ms", 1 /* TEXT */)
                   ]),
                   _createVNode(_component_Slider, {
@@ -1227,8 +1241,8 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true),
             ((_ctx.draft.playedColorSource === 'cover' && (_ctx.draft.progressMask || _ctx.draft.hoverProgress)) || (_ctx.draft.controlsIconColorSource === 'cover' && _ctx.draft.hoverControls))
-              ? (_openBlock(), _createElementBlock("div", _hoisted_63, [
-                  _cache[39] || (_cache[39] = _createElementVNode("div", null, [
+              ? (_openBlock(), _createElementBlock("div", _hoisted_65, [
+                  _cache[41] || (_cache[41] = _createElementVNode("div", null, [
                     _createElementVNode("span", null, "智能颜色对比度"),
                     _createElementVNode("p", null, "根据任务栏明暗及按钮背景，改善封面自动配色的可读性；适用于歌词遮罩、进度条和按钮图标，自定义颜色保持不变。")
                   ], -1 /* CACHED */)),
@@ -1238,8 +1252,8 @@ return function render(_ctx, _cache) {
                   }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
                 ]))
               : _createCommentVNode("v-if", true),
-            _createElementVNode("div", _hoisted_64, [
-              _cache[40] || (_cache[40] = _createElementVNode("div", null, [
+            _createElementVNode("div", _hoisted_66, [
+              _cache[42] || (_cache[42] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "切歌过渡动画"),
                 _createElementVNode("p", null, "新封面加载成功后淡入，自动配色平滑过渡；歌词进度仍按实际播放时间推进。")
               ], -1 /* CACHED */)),
@@ -1249,9 +1263,9 @@ return function render(_ctx, _cache) {
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
             (_ctx.draft.trackTransitions)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_65, [
+              ? (_openBlock(), _createElementBlock("div", _hoisted_67, [
                   _createElementVNode("label", null, [
-                    _cache[41] || (_cache[41] = _createTextVNode("过渡时长 ", -1 /* CACHED */)),
+                    _cache[43] || (_cache[43] = _createTextVNode("过渡时长 ", -1 /* CACHED */)),
                     _createElementVNode("span", null, _toDisplayString(_ctx.draft.transitionDuration) + " ms", 1 /* TEXT */)
                   ]),
                   _createVNode(_component_Slider, {
@@ -1264,13 +1278,13 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true)
           ]),
-          _createElementVNode("section", _hoisted_66, [
-            _cache[47] || (_cache[47] = _createElementVNode("div", { class: "tl-section-heading" }, [
+          _createElementVNode("section", _hoisted_68, [
+            _cache[49] || (_cache[49] = _createElementVNode("div", { class: "tl-section-heading" }, [
               _createElementVNode("h3", null, "歌曲封面"),
               _createElementVNode("p", null, "为任务栏加上一点专辑的色彩。")
             ], -1 /* CACHED */)),
-            _createElementVNode("div", _hoisted_67, [
-              _cache[44] || (_cache[44] = _createElementVNode("div", null, [
+            _createElementVNode("div", _hoisted_69, [
+              _cache[46] || (_cache[46] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "显示歌曲封面"),
                 _createElementVNode("p", null, "点击封面唤出 EchoMusic 主界面；悬停封面或歌词统一显示快捷按钮、播放进度和歌曲信息。")
               ], -1 /* CACHED */)),
@@ -1280,9 +1294,9 @@ return function render(_ctx, _cache) {
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
             (_ctx.draft.showCover)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_68, [
-                  _createElementVNode("div", _hoisted_69, [
-                    _cache[45] || (_cache[45] = _createElementVNode("label", null, "封面形状", -1 /* CACHED */)),
+              ? (_openBlock(), _createElementBlock("div", _hoisted_70, [
+                  _createElementVNode("div", _hoisted_71, [
+                    _cache[47] || (_cache[47] = _createElementVNode("label", null, "封面形状", -1 /* CACHED */)),
                     _createVNode(_component_Select, {
                       modelValue: _ctx.draft.coverShape,
                       "onUpdate:modelValue": $event => ((_ctx.draft.coverShape) = $event),
@@ -1290,8 +1304,8 @@ return function render(_ctx, _cache) {
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"])
                   ]),
                   (_ctx.draft.coverShape === 'circle')
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_70, [
-                        _cache[46] || (_cache[46] = _createElementVNode("div", null, [
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_72, [
+                        _cache[48] || (_cache[48] = _createElementVNode("div", null, [
                           _createElementVNode("span", null, "圆形封面旋转"),
                           _createElementVNode("p", null, "播放时旋转，暂停时停留。")
                         ], -1 /* CACHED */)),
@@ -1304,13 +1318,13 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true)
           ]),
-          _createElementVNode("section", _hoisted_71, [
+          _createElementVNode("section", _hoisted_73, [
             _cache[67] || (_cache[67] = _createElementVNode("div", { class: "tl-section-heading" }, [
               _createElementVNode("h3", null, "快捷操作"),
               _createElementVNode("p", null, "悬停封面或歌词，显示同一组操作；移入移出时平滑淡入淡出。")
             ], -1 /* CACHED */)),
-            _createElementVNode("div", _hoisted_72, [
-              _cache[48] || (_cache[48] = _createElementVNode("div", null, [
+            _createElementVNode("div", _hoisted_74, [
+              _cache[50] || (_cache[50] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "鼠标悬浮显示快捷按钮"),
                 _createElementVNode("p", null, "上一首、播放／暂停、下一首、收藏／取消收藏。")
               ], -1 /* CACHED */)),
@@ -1319,8 +1333,8 @@ return function render(_ctx, _cache) {
                 "onUpdate:modelValue": $event => ((_ctx.draft.hoverControls) = $event)
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
-            _createElementVNode("div", _hoisted_73, [
-              _cache[49] || (_cache[49] = _createElementVNode("div", null, [
+            _createElementVNode("div", _hoisted_75, [
+              _cache[51] || (_cache[51] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "悬浮播放进度条"),
                 _createElementVNode("p", null, "与按钮栏等宽；移入进度条时加粗，上方显示播放时间并暂时隐藏按钮，移开后恢复。点击或拖动后松手跳转，可独立于快捷按钮开启。")
               ], -1 /* CACHED */)),
@@ -1329,20 +1343,9 @@ return function render(_ctx, _cache) {
                 "onUpdate:modelValue": $event => ((_ctx.draft.hoverProgress) = $event)
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
-            (_ctx.draft.hoverControls || _ctx.draft.hoverProgress)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_74, [
-                  _cache[50] || (_cache[50] = _createElementVNode("label", null, "快捷操作位置", -1 /* CACHED */)),
-                  _createVNode(_component_Select, {
-                    modelValue: _ctx.draft.controlsAlignment,
-                    "onUpdate:modelValue": $event => ((_ctx.draft.controlsAlignment) = $event),
-                    options: _ctx.controlsAlignmentOptions
-                  }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
-                  _cache[51] || (_cache[51] = _createElementVNode("p", { class: "tl-note" }, "按钮与进度条一起对齐。居中位置随当前歌词长度调整，尺寸保持不变；短句会预留空间，避免遮住封面。", -1 /* CACHED */))
-                ]))
-              : _createCommentVNode("v-if", true),
             (_ctx.draft.hoverControls)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_75, [
-                  _createElementVNode("div", _hoisted_76, [
+              ? (_openBlock(), _createElementBlock("div", _hoisted_76, [
+                  _createElementVNode("div", _hoisted_77, [
                     _cache[53] || (_cache[53] = _createElementVNode("label", null, "快捷按钮图标颜色", -1 /* CACHED */)),
                     _createVNode(_component_Select, {
                       modelValue: _ctx.draft.controlsIconColorSource,
@@ -1350,7 +1353,7 @@ return function render(_ctx, _cache) {
                       options: _ctx.controlsBackgroundOptions
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
                     (_ctx.draft.controlsIconColorSource === 'cover')
-                      ? (_openBlock(), _createElementBlock("p", _hoisted_77, [
+                      ? (_openBlock(), _createElementBlock("p", _hoisted_78, [
                           _createElementVNode("span", {
                             style: _normalizeStyle({ background:_ctx.previewControls.foreground })
                           }, null, 4 /* STYLE */),
@@ -1359,20 +1362,20 @@ return function render(_ctx, _cache) {
                       : _createCommentVNode("v-if", true)
                   ]),
                   (_ctx.draft.controlsIconColorSource === 'custom')
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_78, [
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_79, [
                         _cache[54] || (_cache[54] = _createElementVNode("label", null, "自定义图标颜色", -1 /* CACHED */)),
-                        _createElementVNode("label", _hoisted_79, [
+                        _createElementVNode("label", _hoisted_80, [
                           _createElementVNode("input", {
                             type: "color",
                             "aria-label": "快捷按钮自定义图标颜色",
                             value: _ctx.draft.controlsIconColor,
                             onInput: $event => (_ctx.setColor('controlsIconColor', $event))
-                          }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_80),
+                          }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_81),
                           _createElementVNode("span", null, _toDisplayString(_ctx.draft.controlsIconColor), 1 /* TEXT */)
                         ])
                       ]))
                     : _createCommentVNode("v-if", true),
-                  _createElementVNode("div", _hoisted_81, [
+                  _createElementVNode("div", _hoisted_82, [
                     _cache[56] || (_cache[56] = _createElementVNode("label", null, "快捷按钮背景颜色", -1 /* CACHED */)),
                     _createVNode(_component_Select, {
                       modelValue: _ctx.draft.controlsBackgroundSource,
@@ -1380,7 +1383,7 @@ return function render(_ctx, _cache) {
                       options: _ctx.controlsBackgroundOptions
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
                     (_ctx.draft.controlsBackgroundSource === 'cover')
-                      ? (_openBlock(), _createElementBlock("p", _hoisted_82, [
+                      ? (_openBlock(), _createElementBlock("p", _hoisted_83, [
                           _createElementVNode("span", {
                             style: _normalizeStyle({ background:_ctx.previewControls.background })
                           }, null, 4 /* STYLE */),
@@ -1389,20 +1392,20 @@ return function render(_ctx, _cache) {
                       : _createCommentVNode("v-if", true)
                   ]),
                   (_ctx.draft.controlsBackgroundSource === 'custom')
-                    ? (_openBlock(), _createElementBlock("div", _hoisted_83, [
+                    ? (_openBlock(), _createElementBlock("div", _hoisted_84, [
                         _cache[57] || (_cache[57] = _createElementVNode("label", null, "自定义背景颜色", -1 /* CACHED */)),
-                        _createElementVNode("label", _hoisted_84, [
+                        _createElementVNode("label", _hoisted_85, [
                           _createElementVNode("input", {
                             type: "color",
                             "aria-label": "快捷按钮自定义背景颜色",
                             value: _ctx.draft.controlsBackgroundColor,
                             onInput: $event => (_ctx.setColor('controlsBackgroundColor', $event))
-                          }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_85),
+                          }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_86),
                           _createElementVNode("span", null, _toDisplayString(_ctx.draft.controlsBackgroundColor), 1 /* TEXT */)
                         ])
                       ]))
                     : _createCommentVNode("v-if", true),
-                  _createElementVNode("div", _hoisted_86, [
+                  _createElementVNode("div", _hoisted_87, [
                     _createElementVNode("label", null, [
                       _cache[58] || (_cache[58] = _createTextVNode("背景透明度 ", -1 /* CACHED */)),
                       _createElementVNode("span", null, _toDisplayString(_ctx.backgroundTransparency) + "%", 1 /* TEXT */)
@@ -1416,7 +1419,7 @@ return function render(_ctx, _cache) {
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
                     _cache[59] || (_cache[59] = _createElementVNode("p", { class: "tl-note" }, "0% 不透明，100% 完全透明。仅影响按钮栏背景，鼠标移入上方预览查看效果。", -1 /* CACHED */))
                   ]),
-                  _createElementVNode("div", _hoisted_87, [
+                  _createElementVNode("div", _hoisted_88, [
                     _createElementVNode("label", null, [
                       _cache[60] || (_cache[60] = _createTextVNode("按钮圆角 ", -1 /* CACHED */)),
                       _createElementVNode("span", null, _toDisplayString(_ctx.draft.controlsCornerRadius) + " px", 1 /* TEXT */)
@@ -1430,9 +1433,9 @@ return function render(_ctx, _cache) {
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"]),
                     _cache[61] || (_cache[61] = _createElementVNode("p", { class: "tl-note" }, "统一调整按钮栏及按钮悬停、按下背景的圆角；0 为直角，数值越大越圆。", -1 /* CACHED */))
                   ]),
-                  _createElementVNode("div", _hoisted_88, [
+                  _createElementVNode("div", _hoisted_89, [
                     _createElementVNode("div", null, [
-                      _createElementVNode("div", _hoisted_89, [
+                      _createElementVNode("div", _hoisted_90, [
                         _cache[62] || (_cache[62] = _createElementVNode("div", null, [
                           _createElementVNode("span", null, "按钮悬停背景"),
                           _createElementVNode("p", null, "鼠标放在单个按钮上时显示背景。")
@@ -1443,22 +1446,22 @@ return function render(_ctx, _cache) {
                         }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
                       ]),
                       (_ctx.draft.buttonHoverBackground)
-                        ? (_openBlock(), _createElementBlock("div", _hoisted_90, [
+                        ? (_openBlock(), _createElementBlock("div", _hoisted_91, [
                             _cache[63] || (_cache[63] = _createElementVNode("label", null, "悬停背景颜色", -1 /* CACHED */)),
-                            _createElementVNode("label", _hoisted_91, [
+                            _createElementVNode("label", _hoisted_92, [
                               _createElementVNode("input", {
                                 type: "color",
                                 "aria-label": "按钮悬停背景颜色",
                                 value: _ctx.draft.buttonHoverColor,
                                 onInput: $event => (_ctx.setColor('buttonHoverColor', $event))
-                              }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_92),
+                              }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_93),
                               _createElementVNode("span", null, _toDisplayString(_ctx.draft.buttonHoverColor), 1 /* TEXT */)
                             ])
                           ]))
                         : _createCommentVNode("v-if", true)
                     ]),
                     _createElementVNode("div", null, [
-                      _createElementVNode("div", _hoisted_93, [
+                      _createElementVNode("div", _hoisted_94, [
                         _cache[64] || (_cache[64] = _createElementVNode("div", null, [
                           _createElementVNode("span", null, "按钮按下背景"),
                           _createElementVNode("p", null, "按住单个按钮时显示背景，优先于悬停状态。")
@@ -1469,15 +1472,15 @@ return function render(_ctx, _cache) {
                         }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
                       ]),
                       (_ctx.draft.buttonPressedBackground)
-                        ? (_openBlock(), _createElementBlock("div", _hoisted_94, [
+                        ? (_openBlock(), _createElementBlock("div", _hoisted_95, [
                             _cache[65] || (_cache[65] = _createElementVNode("label", null, "按下背景颜色", -1 /* CACHED */)),
-                            _createElementVNode("label", _hoisted_95, [
+                            _createElementVNode("label", _hoisted_96, [
                               _createElementVNode("input", {
                                 type: "color",
                                 "aria-label": "按钮按下背景颜色",
                                 value: _ctx.draft.buttonPressedColor,
                                 onInput: $event => (_ctx.setColor('buttonPressedColor', $event))
-                              }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_96),
+                              }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_97),
                               _createElementVNode("span", null, _toDisplayString(_ctx.draft.buttonPressedColor), 1 /* TEXT */)
                             ])
                           ]))
@@ -1488,12 +1491,12 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true)
           ]),
-          _createElementVNode("section", _hoisted_97, [
+          _createElementVNode("section", _hoisted_98, [
             _cache[79] || (_cache[79] = _createElementVNode("div", { class: "tl-section-heading" }, [
               _createElementVNode("h3", null, "歌曲信息"),
               _createElementVNode("p", null, "悬停封面或歌词时，歌名与歌手合为一段文字显示在快捷按钮上方，宽度跟随按钮栏。")
             ], -1 /* CACHED */)),
-            _createElementVNode("div", _hoisted_98, [
+            _createElementVNode("div", _hoisted_99, [
               _cache[68] || (_cache[68] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "显示歌曲信息"),
                 _createElementVNode("p", null, "悬停封面或歌词时显示歌名与歌手，与按钮及进度条自动居中排列。")
@@ -1504,17 +1507,17 @@ return function render(_ctx, _cache) {
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
             (_ctx.draft.hoverSongInfo)
-              ? (_openBlock(), _createElementBlock("div", _hoisted_99, [
+              ? (_openBlock(), _createElementBlock("div", _hoisted_100, [
                   _cache[77] || (_cache[77] = _createElementVNode("div", { class: "tl-subheading" }, "文字样式", -1 /* CACHED */)),
-                  _createElementVNode("div", _hoisted_100, [
+                  _createElementVNode("div", _hoisted_101, [
                     _cache[69] || (_cache[69] = _createElementVNode("span", null, "显示歌手", -1 /* CACHED */)),
                     _createVNode(_component_Switch, {
                       modelValue: _ctx.draft.noticeShowArtist,
                       "onUpdate:modelValue": $event => ((_ctx.draft.noticeShowArtist) = $event)
                     }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
                   ]),
-                  _createElementVNode("div", _hoisted_101, [
-                    _createElementVNode("div", _hoisted_102, [
+                  _createElementVNode("div", _hoisted_102, [
+                    _createElementVNode("div", _hoisted_103, [
                       _cache[70] || (_cache[70] = _createElementVNode("label", null, "文字对齐", -1 /* CACHED */)),
                       _createVNode(_component_Select, {
                         modelValue: _ctx.draft.noticeTextAlignment,
@@ -1523,7 +1526,7 @@ return function render(_ctx, _cache) {
                       }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
                       _cache[71] || (_cache[71] = _createElementVNode("p", { class: "tl-note" }, "歌名与歌手整段对齐、一起滚动；溢出时先显示开头。", -1 /* CACHED */))
                     ]),
-                    _createElementVNode("div", _hoisted_103, [
+                    _createElementVNode("div", _hoisted_104, [
                       _createElementVNode("label", null, [
                         _cache[72] || (_cache[72] = _createTextVNode("歌曲信息字号 ", -1 /* CACHED */)),
                         _createElementVNode("span", null, _toDisplayString(_ctx.draft.noticeTitleFontSize) + " px", 1 /* TEXT */)
@@ -1536,7 +1539,7 @@ return function render(_ctx, _cache) {
                         step: 1
                       }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
                     ]),
-                    _createElementVNode("div", _hoisted_104, [
+                    _createElementVNode("div", _hoisted_105, [
                       _cache[73] || (_cache[73] = _createElementVNode("label", null, "文字配色", -1 /* CACHED */)),
                       _createVNode(_component_Select, {
                         modelValue: _ctx.draft.noticeTextSource,
@@ -1544,46 +1547,46 @@ return function render(_ctx, _cache) {
                         options: _ctx.noticeTextOptions
                       }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue", "options"]),
                       (_ctx.draft.noticeTextSource === 'cover-primary')
-                        ? (_openBlock(), _createElementBlock("p", _hoisted_105, "使用封面的鲜艳主色。"))
+                        ? (_openBlock(), _createElementBlock("p", _hoisted_106, "使用封面的鲜艳主色。"))
                         : _createCommentVNode("v-if", true),
                       (_ctx.draft.noticeTextSource === 'cover')
-                        ? (_openBlock(), _createElementBlock("p", _hoisted_106, "从封面中选择与当前快捷按钮颜色协调、易于区分的配色。"))
+                        ? (_openBlock(), _createElementBlock("p", _hoisted_107, "从封面中选择与当前快捷按钮颜色协调、易于区分的配色。"))
                         : _createCommentVNode("v-if", true),
                       (_ctx.draft.noticeTextSource === 'cover' || _ctx.draft.noticeTextSource === 'cover-primary')
-                        ? (_openBlock(), _createElementBlock("p", _hoisted_107, "新颜色就绪前保留上次配色；渐变跟随“切歌过渡”的开关和时长。"))
+                        ? (_openBlock(), _createElementBlock("p", _hoisted_108, "新颜色就绪前保留上次配色；渐变跟随“切歌过渡”的开关和时长。"))
                         : _createCommentVNode("v-if", true)
                     ]),
                     (_ctx.draft.noticeTextSource === 'custom')
-                      ? (_openBlock(), _createElementBlock("div", _hoisted_108, [
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_109, [
                           _cache[74] || (_cache[74] = _createElementVNode("label", null, "歌名颜色", -1 /* CACHED */)),
-                          _createElementVNode("label", _hoisted_109, [
+                          _createElementVNode("label", _hoisted_110, [
                             _createElementVNode("input", {
                               type: "color",
                               "aria-label": "歌曲信息歌名颜色",
                               value: _ctx.draft.noticeTitleColor,
                               onInput: $event => (_ctx.setColor('noticeTitleColor', $event))
-                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_110),
+                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_111),
                             _createElementVNode("span", null, _toDisplayString(_ctx.draft.noticeTitleColor), 1 /* TEXT */)
                           ])
                         ]))
                       : _createCommentVNode("v-if", true),
                     (_ctx.draft.noticeTextSource === 'custom' && _ctx.draft.noticeShowArtist)
-                      ? (_openBlock(), _createElementBlock("div", _hoisted_111, [
+                      ? (_openBlock(), _createElementBlock("div", _hoisted_112, [
                           _cache[75] || (_cache[75] = _createElementVNode("label", null, "歌手颜色", -1 /* CACHED */)),
-                          _createElementVNode("label", _hoisted_112, [
+                          _createElementVNode("label", _hoisted_113, [
                             _createElementVNode("input", {
                               type: "color",
                               "aria-label": "歌曲信息歌手颜色",
                               value: _ctx.draft.noticeArtistColor,
                               onInput: $event => (_ctx.setColor('noticeArtistColor', $event))
-                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_113),
+                            }, null, 40 /* PROPS, NEED_HYDRATION */, _hoisted_114),
                             _createElementVNode("span", null, _toDisplayString(_ctx.draft.noticeArtistColor), 1 /* TEXT */)
                           ])
                         ]))
                       : _createCommentVNode("v-if", true)
                   ]),
                   _cache[78] || (_cache[78] = _createElementVNode("p", { class: "tl-note" }, "歌名与歌手使用相同字号，字体跟随“歌词字体”；整体自动适应任务栏高度及屏幕缩放。", -1 /* CACHED */)),
-                  _createElementVNode("div", _hoisted_114, [
+                  _createElementVNode("div", _hoisted_115, [
                     _cache[76] || (_cache[76] = _createElementVNode("div", null, [
                       _createElementVNode("span", null, "长文字自动滚动"),
                       _createElementVNode("p", null, "关闭后显示省略号；只在文字溢出时滚动，暂停播放也可查看。")
@@ -1596,12 +1599,12 @@ return function render(_ctx, _cache) {
                 ]))
               : _createCommentVNode("v-if", true)
           ]),
-          _createElementVNode("section", _hoisted_115, [
+          _createElementVNode("section", _hoisted_116, [
             _cache[83] || (_cache[83] = _createElementVNode("div", { class: "tl-section-heading" }, [
               _createElementVNode("h3", null, "播放行为"),
               _createElementVNode("p", null, "让歌词显示适应你的使用习惯。")
             ], -1 /* CACHED */)),
-            _createElementVNode("div", _hoisted_116, [
+            _createElementVNode("div", _hoisted_117, [
               _cache[80] || (_cache[80] = _createElementVNode("div", null, [
                 _createElementVNode("span", null, "长歌词随进度滚动"),
                 _createElementVNode("p", null, "暂停时停止，跳转后重新对齐。")
@@ -1611,14 +1614,14 @@ return function render(_ctx, _cache) {
                 "onUpdate:modelValue": $event => ((_ctx.draft.scrollLyrics) = $event)
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
-            _createElementVNode("div", _hoisted_117, [
+            _createElementVNode("div", _hoisted_118, [
               _cache[81] || (_cache[81] = _createElementVNode("span", null, "暂停时隐藏", -1 /* CACHED */)),
               _createVNode(_component_Switch, {
                 modelValue: _ctx.draft.hidePaused,
                 "onUpdate:modelValue": $event => ((_ctx.draft.hidePaused) = $event)
               }, null, 8 /* PROPS */, ["modelValue", "onUpdate:modelValue"])
             ]),
-            _createElementVNode("div", _hoisted_118, [
+            _createElementVNode("div", _hoisted_119, [
               _cache[82] || (_cache[82] = _createElementVNode("span", null, "全屏应用时隐藏", -1 /* CACHED */)),
               _createVNode(_component_Switch, {
                 modelValue: _ctx.draft.hideFullscreen,
@@ -1627,9 +1630,9 @@ return function render(_ctx, _cache) {
             ])
           ])
         ]))
-      : (_openBlock(), _createElementBlock("p", _hoisted_119, "开启上方开关后，即可调整歌词、封面和快捷操作。")),
-    _createElementVNode("footer", _hoisted_120, [
-      _createElementVNode("div", _hoisted_121, [
+      : (_openBlock(), _createElementBlock("p", _hoisted_120, "开启上方开关后，即可调整歌词、封面和快捷操作。")),
+    _createElementVNode("footer", _hoisted_121, [
+      _createElementVNode("div", _hoisted_122, [
         _createVNode(_component_Button, {
           class: "tl-action-button",
           size: "sm",
@@ -1670,7 +1673,7 @@ return function render(_ctx, _cache) {
           _: 1 /* STABLE */
         }, 8 /* PROPS */, ["onClick", "disabled"])
       ]),
-      _createElementVNode("p", _hoisted_122, _toDisplayString(_ctx.status), 1 /* TEXT */)
+      _createElementVNode("p", _hoisted_123, _toDisplayString(_ctx.status), 1 /* TEXT */)
     ])
   ]))
 }
@@ -1896,7 +1899,7 @@ export async function activate(ctx) {
       const secondaryOptions=[{label:'下一句歌词',value:'next'},{label:'翻译／音译',value:'translation'}];
       const themeOptions=[{label:'跟随 Windows 任务栏',value:'auto'},{label:'自定义文字颜色',value:'custom'}];
       const coverShapeOptions=[{label:'矩形封面',value:'rectangle'},{label:'圆形封面',value:'circle'}];
-      const controlsAlignmentOptions=[{label:'靠左',value:'left'},{label:'随当前歌词长度居中',value:'center'}];
+      const placementAlignmentOptions=[{label:'居左',value:'left'},{label:'居中',value:'center'},{label:'居右（封面在右）',value:'right'}];
       const playedColorOptions=[{label:'手动设置',value:'custom'},{label:'封面自动取色',value:'cover'}];
       const controlsBackgroundOptions=[{label:'自定义颜色',value:'custom'},{label:'使用封面配色',value:'cover'}];
       const noticeBackgroundOptions=[{label:'自定义颜色',value:'custom'},{label:'使用封面配色',value:'cover'},{label:'毛玻璃',value:'glass'}];
@@ -1980,7 +1983,7 @@ export async function activate(ctx) {
         if (settings.enabled && !pid) await start();
       });
       const reset = () => { Object.assign(draft, DEFAULTS); return save(); };
-      return { draft, previewCapacity, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, controlsAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
+      return { draft, previewCapacity, transparency, backgroundTransparency, busy, status, save, reset, fontOptions, previewProgress, previewProgressHovered, previewElapsed, previewDuration, previewFont, previewColors, previewLight, previewPlayed, previewControls, previewNotice, previewLyricKey, previewLyricFirst, previewLyricSecond, previewLyricSwap, lyricTransitionOptions, noticeBackgroundOptions, noticeTextOptions, noticeAlignmentOptions, onPreviewNoticeHover, playedColorOptions, controlsBackgroundOptions, layoutOptions, secondaryOptions, themeOptions, displayOptions, coverShapeOptions, placementAlignmentOptions, previewCover, previewCoverPrevious, previewCoverLoaded, onPreviewCoverLoad, onPreviewCoverError, onPreviewCoverHover, previewTitle, previewArtist, previewPlaying, previewLoading, previewFavorite, coverFailed, setColor, restart: () => run(start) };
     }
   });
   ctx.ui.settings.define({ title:'任务栏歌词 · 微光', component:panel });

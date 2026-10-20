@@ -22,6 +22,11 @@
 .tl-cover-circle{border-radius:50%}
 .tl-cover-spin{animation:tl-disc-spin 20s linear infinite}
 .tl-preview-content{position:relative;flex:0 1 auto;width:max-content;min-width:150px;min-height:48px;display:flex;align-items:center}
+.tl-preview-body .tl-preview-content{flex:1;min-width:0}
+/* 居右时留白放在文字左侧，封面与短歌词保持紧凑。 */
+.tl-preview-body .tl-preview-content.tl-placement-right{flex:0 1 auto;margin-left:auto}
+.tl-placement-right .tl-preview-lyrics{width:100%;text-align:right}
+.tl-placement-right .tl-preview-line{margin-left:auto}
 .tl-preview-progress-enabled .tl-preview-content{min-height:48px;display:flex;align-items:center}
 .tl-preview-progress-enabled .tl-preview-line{line-height:1.25}
 
@@ -61,17 +66,17 @@
 .tl-preview-light .tl-preview-controls{color:#202d35;background:#00000008}
 .tl-preview-hover:hover .tl-preview-controls,.tl-preview-hover:focus-within .tl-preview-controls{opacity:1;pointer-events:auto}
 .tl-preview-hover:hover .tl-preview-lyrics,.tl-preview-hover:focus-within .tl-preview-lyrics{opacity:0}
-.tl-preview.tl-controls-left .tl-preview-content{flex:1}
-.tl-preview.tl-controls-left .tl-preview-controls{left:3px;transform:translateY(-50%)}
-.tl-preview.tl-controls-left .tl-preview-timeline{left:3px;transform:none}
-.tl-preview.tl-controls-left .tl-preview-progress-time{left:3px;transform:translateY(-50%)}
+.tl-preview.tl-controls-edge .tl-preview-content{flex:1}
+.tl-preview.tl-controls-edge .tl-preview-controls{left:3px;transform:translateY(-50%)}
+.tl-preview.tl-controls-edge .tl-preview-timeline{left:3px;transform:none}
+.tl-preview.tl-controls-edge .tl-preview-progress-time{left:3px;transform:translateY(-50%)}
 .tl-preview:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-controls{opacity:0;pointer-events:none}
 .tl-preview:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-progress-time{opacity:1}
 .tl-preview:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-lyrics{opacity:0}
 .tl-preview-timeline:hover input::-webkit-slider-runnable-track,.tl-preview-timeline input:active::-webkit-slider-runnable-track{height:6px}
 .tl-preview-timeline:hover input::-webkit-slider-thumb,.tl-preview-timeline input:active::-webkit-slider-thumb{width:8px;height:8px;margin-top:-1px;border-radius:50%}
 .tl-preview-songinfo{position:absolute;left:50%;top:0;width:144px;max-width:100%;height:12px;display:flex;align-items:center;justify-content:flex-start;gap:4px;opacity:0;pointer-events:none;transform:translate(-50%,2px);transition:opacity .16s,transform .16s;overflow:hidden}
-.tl-controls-left .tl-preview-songinfo{left:75px;max-width:150px}
+.tl-controls-edge .tl-preview-songinfo{left:75px;max-width:150px}
 .tl-preview-info-line{min-width:0;flex:1;overflow:hidden;line-height:1.2;white-space:nowrap}
 .tl-preview-info-artist{display:inline;font-weight:400}
 .tl-preview-info-line>.tl-preview-info-glyph{display:block;width:max-content;max-width:100%;overflow:hidden;text-overflow:ellipsis}
@@ -81,7 +86,8 @@
 /* 信息、按钮与进度共用悬停动画，均在任务栏预览内部。 */
 /* 可见组件整体垂直居中，关闭组件不保留空位。 */
 .tl-preview-interaction{position:absolute;z-index:1;left:50%;top:50%;width:144px;max-width:100%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:stretch}
-.tl-controls-left .tl-preview-interaction{left:3px;transform:translateY(-50%)}
+.tl-controls-edge .tl-preview-interaction{left:3px;transform:translateY(-50%)}
+.tl-controls-edge .tl-placement-right .tl-preview-interaction{left:auto;right:3px}
 .tl-preview-middle{position:relative;flex:none;height:24px}
 .tl-no-buttons .tl-preview-middle{display:none}
 .tl-no-buttons:has(.tl-preview-timeline:hover,.tl-preview-timeline input:active) .tl-preview-middle{display:block}

@@ -1,7 +1,7 @@
 {
   "id": "taskbar-lyrics",
   "name": "任务栏歌词 · 微光",
-  "version": "1.1.8",
+  "version": "1.1.10",
   "description": "最好用的 Windows 任务栏歌词插件，没有之一。将同步歌词、动态封面与快捷播放操作融入任务栏，支持多屏显示、智能配色与个性化外观，简洁优雅，随心定制。",
   "author": "CarsonGame",
   "icon": "icon.svg",

@@ -52,10 +52,18 @@ static class TaskbarSpaceLayout
     }
     internal static TaskbarSpacePlacement Resolve(Rect bar,Rect preferred,Rect[] occupied,double scale,double minimum,bool cover)
     {
+        return ResolveAligned(bar,preferred,occupied,scale,minimum,cover,"left");
+    }
+    internal static TaskbarSpacePlacement ResolveAligned(Rect bar,Rect preferred,Rect[] occupied,double scale,double minimum,bool cover,string alignment)
+    {
         var empty=new TaskbarSpacePlacement {Area=new Rect(preferred.X,preferred.Y,0,preferred.Height)};
         if(bar.IsEmpty || preferred.IsEmpty || bar.Width<=0 || bar.Height<=0)return empty;
         bool horizontal=bar.Width>=bar.Height;
-        double start=horizontal?preferred.Left:preferred.Top,end=horizontal?bar.Right:bar.Bottom;
+        // 偏移只限制所选方向的边界，居中仍可使用中心两侧的完整空位。
+        bool right=horizontal && alignment=="right",center=horizontal && alignment=="center";
+        double anchor=preferred.Left+preferred.Width/2;
+        double start=horizontal?(right || center?bar.Left:preferred.Left):preferred.Top;
+        double end=horizontal?(right?preferred.Right:bar.Right):bar.Bottom;
         double padding=4*scale,coverWidth=Math.Ceiling((Math.Min(36,Math.Max(16,preferred.Height/scale-10))+8)*scale);
         double required=Math.Ceiling((Math.Max(0,minimum)+8)*scale+(cover?coverWidth:0));
         var blocks=new List<Rect>();
@@ -66,25 +74,27 @@ static class TaskbarSpaceLayout
         blocks.Sort((a,b)=>(horizontal?a.Left:a.Top).CompareTo(horizontal?b.Left:b.Top));
         var gaps=new List<Rect>();
         foreach(Rect item in blocks){
-            double first=(horizontal?item.Left:item.Top)-padding,last=(horizontal?item.Right:item.Bottom)+padding;
+            double first=Math.Min(end,(horizontal?item.Left:item.Top)-padding),last=(horizontal?item.Right:item.Bottom)+padding;
             if(last<=start)continue;
             if(first>start)gaps.Add(horizontal?new Rect(start,bar.Top,first-start,bar.Height):new Rect(bar.Left,start,bar.Width,first-start));
             start=Math.Max(start,last);
             if(start>=end)break;
         }
         if(start<end)gaps.Add(horizontal?new Rect(start,bar.Top,end-start,bar.Height):new Rect(bar.Left,start,bar.Width,end-start));
+        if(right)gaps.Reverse();
         // 先找能容纳完整控件的空位；不足时只保留原尺寸封面。
         foreach(Rect candidate in gaps){
             Rect gap=PixelAligned(candidate);
             double width=Math.Min(preferred.Width,gap.Width),height=Math.Min(preferred.Height,gap.Height);
+            if(center)width=Math.Min(width,Math.Max(0,2*(gap.Right-anchor)));
             if(width+0.01>=required && (horizontal || height+0.01>=preferred.Height))
-                return new TaskbarSpacePlacement {Area=new Rect(gap.X,gap.Y,width,height),Lyrics=true,Cover=cover};
+                return new TaskbarSpacePlacement {Area=PixelAligned(new Rect(right?gap.Right-width:center?Math.Max(gap.Left,anchor-width/2):gap.X,gap.Y,width,height)),Lyrics=true,Cover=cover};
         }
         if(cover)foreach(Rect candidate in gaps){
             Rect gap=PixelAligned(candidate);
-            if(Math.Min(preferred.Width,gap.Width)+0.01>=coverWidth && gap.Height+0.01>=preferred.Height){
+            if(Math.Min(preferred.Width,gap.Width)+0.01>=coverWidth && gap.Height+0.01>=preferred.Height && (!center || gap.Right-coverWidth/2>=anchor)){
                 bool rightSide=!horizontal || gap.Left+gap.Width/2>=bar.Left+bar.Width/2;
-                double x=rightSide?gap.Right-coverWidth:gap.Left;
+                double x=right?gap.Right-coverWidth:center?Math.Max(gap.Left,anchor-coverWidth/2):rightSide?gap.Right-coverWidth:gap.Left;
                 return new TaskbarSpacePlacement {Area=new Rect(x,gap.Y,coverWidth,preferred.Height),Cover=true};
             }
         }
@@ -165,6 +175,7 @@ sealed class TaskbarSpaceStability
     Rect space=Rect.Empty;
     DateTime candidateAt;
     internal bool Confirmed=true;
+    internal void Reset(){initialized=false;space=Rect.Empty;}
     internal bool Waiting {get {return initialized && candidate!=accepted;}}
     internal Rect Constrain(Rect safe,DateTime now)
     {

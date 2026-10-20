@@ -43,10 +43,17 @@ class InformationHitHarness {
                         ((DispatcherTimer)Field(surface,"pointerTimer")).Stop();
                         ShowWindow(parent.Handle,4);ShowWindow((IntPtr)Field(surface,"handle"),4);
                         Set(surface,"allowDisplay",true);Set(surface,"hoverInfoEnabled",true);Set(surface,"hovering",true);Set(surface,"hoverAmount",1.0);Set(surface,"noticeVisible",true);
+                        // 补齐实际帧提供的布局尺寸，避免零高度导致命中测试被裁切。
+                        Set(surface,"lyricAreaHeight",48.0);Set(surface,"hoverEnabled",true);
+                        ((Grid)Field(surface,"controlsAnchor")).Width=308;
+                        ((Viewbox)Field(surface,"controlsViewport")).MaxWidth=308;
+                        ((Grid)Field(surface,"coverHost")).Visibility=Visibility.Visible;
                         var view=(UserControl)Field(surface,"window");var viewport=(Viewbox)Field(surface,"noticeViewport");
                         var text=(TextBlock)Field(surface,"noticeTitle");var titleRun=(Run)Field(surface,"noticeSongRun");var artistRun=(Run)Field(surface,"noticeArtistRun");
                         var settings=new Dictionary<string,object>((Dictionary<string,object>)Field(null,"defaults"));settings["noticeTextSource"]="custom";settings["noticeTextAlignment"]="left";
-                        foreach(double size in new[]{10.0,19.0,24.0})foreach(string[] artists in new[]{new[]{"甲","乙"},new[]{"AC/DC","Earth, Wind & Fire","陈奕迅"},new[]{"歌手😀","最后一位歌手"}}){
+                        foreach(string alignment in new[]{"left","center","right"})foreach(double size in new[]{10.0,19.0,24.0})foreach(string[] artists in new[]{new[]{"甲","乙"},new[]{"AC/DC","Earth, Wind & Fire","陈奕迅"},new[]{"歌手😀","最后一位歌手"}}){
+                            Call(surface,"LayoutOrder",alignment);
+                            Call(surface,"LayoutControls",308.0);
                             settings["noticeTitleFontSize"]=size;Set(surface,"noticeSong","很长的歌曲名称与滚动验证 ABC 2026");Set(surface,"noticePerformer",String.Join(" / ",artists));
                             var names=(List<string>)Field(surface,"noticeArtists");names.Clear();names.AddRange(artists);
                             Call(surface,"StyleNotice",settings,new Dictionary<string,object>());

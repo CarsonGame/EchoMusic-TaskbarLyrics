@@ -49,7 +49,7 @@
     <!-- 内容统一上下偏移，窗口继续贴合任务栏。 -->
     <Grid x:Name="TaskbarContent">
     <Grid.RenderTransform><TranslateTransform x:Name="VerticalShift"/></Grid.RenderTransform>
-    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition x:Name="LeadingColumn" Width="Auto"/><ColumnDefinition x:Name="TrailingColumn" Width="*"/></Grid.ColumnDefinitions>
     <Grid x:Name="CoverHost" Width="36" Height="36" Margin="4,0,4,0" VerticalAlignment="Center" Visibility="Collapsed">
       <Grid x:Name="CoverVisual" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
         <Grid.RenderTransform><RotateTransform x:Name="CoverRotation"/></Grid.RenderTransform>
@@ -103,7 +103,7 @@
         </StackPanel>
       </Border>
     </Viewbox>
-    <!-- 居中按文字定位，并保留固定按钮宽度。 -->
+    <!-- 控件固定尺寸，按封面所在一侧对齐。 -->
     <Grid Grid.Row="1" x:Name="ControlsAnchor" HorizontalAlignment="Left" Margin="4,0,4,0">
     <Viewbox x:Name="ControlsViewport" Visibility="Collapsed" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0">
       <Border x:Name="ControlsSurface" Width="144" Height="24" CornerRadius="{DynamicResource ControlCornerRadius}" Background="#E0202831" Padding="4,2">
