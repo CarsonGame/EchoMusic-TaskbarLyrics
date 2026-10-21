@@ -18,7 +18,7 @@
 
 ## 安装
 
-需要 **Windows x64**、系统自带的 **.NET Framework WPF**，以及 **EchoMusic 2.3.2-beta.9 或更新版本**。
+需要 **Windows x64**、系统自带的 **.NET Framework WPF**，以及支持本地进程、本机 Web 服务和酷狗 API 插件接口的 EchoMusic。不设置最低播放器版本；旧版兼容性取决于其接口支持情况。
 
 在 EchoMusic 插件管理中添加插件源，安装并启用“任务栏歌词 · 微光”：
 

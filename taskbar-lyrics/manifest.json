@@ -15,8 +15,5 @@
     "process": true,
     "webServer": true,
     "kugouApi": true
-  },
-  "requires": {
-    "echoMusicVersion": ">=2.3.2-beta.9"
   }
 }
